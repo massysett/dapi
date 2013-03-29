@@ -1,10 +1,19 @@
 {-# LANGUAGE FlexibleInstances, MultiParamTypeClasses #-}
 module Main where
 
-import Data.Functor.Identity (Identity)
 import Control.Applicative
+  ( many, (<$), (<|>), some, (<$>),
+    (<*>), (<*))
+
+import Control.Monad (guard)
+import qualified Control.Monad.Exception.Synchronous as Ex
+import qualified Data.Time as T
+import Data.Time.Calendar.WeekDate (toWeekDate)
+import Data.Functor.Identity (Identity)
 import Data.Char (toLower)
 import Data.List (isPrefixOf)
+import Data.Maybe (fromMaybe)
+import Text.Parsec (char)
 import qualified Text.Parsec as P
 
 help :: String -> String
@@ -81,6 +90,9 @@ matchAbbrev ls s = case lookup s ls of
     (_, v):[] -> Just v
     _ -> Nothing
 
+data DateSpec = DateSpec (Either Absolute Relative)
+  deriving (Eq, Show)
+
 data RangeSpec
   = Week
   | Month
@@ -136,5 +148,197 @@ data LastDay = LastDay
 data Day = Day [Digit]
   deriving (Eq, Show)
 
+data RelRange = RelRange ModArith RangeSpec
+  deriving (Eq, Show)
+
+data DayOfWeek = Sun | Mon | Tue | Wed | Thu | Fri | Sat
+  deriving (Eq, Show)
+
+data Relative = Relative (Either RelDay RelRange)
+  deriving (Eq, Show)
+
 pRangeSpec :: Parser RangeSpec
-pRangeSpec = undefined
+pRangeSpec = parseList "range specification"
+  [ ("week", Week), ("month", Month), ("year", Year)
+  , ("decade", Decade), ("century", Century)
+  , ("millennium", Millennium), ("quarter", Quarter) ]
+
+pModText :: Parser ModText
+pModText = parseList "modifier"
+  [ ("this", This), ("next", Next), ("last", Last) ]
+
+pSign :: Parser Sign
+pSign = Plus <$ char '+' <|> Minus <$ char '-'
+
+spaces :: Parser ()
+spaces = () <$ many (char ' ')
+
+pDigit :: Parser Digit
+pDigit = f <$> P.digit
+  where
+    f d = case d of
+      { '0' -> D0; '1' -> D1; '2' -> D2; '3' -> D3;
+        '4' -> D4; '5' -> D5; '6' -> D6; '7' -> D7;
+        '8' -> D8; '9' -> D9;
+        _ -> error "pDigit: error: Parsec digit failed" }
+
+pModArith :: Parser ModArith
+pModArith = ModArith <$> pSign <*> some pDigit
+
+pEither :: Parser a -> Parser b -> Parser (Either a b)
+pEither a b = Left <$> a <|> Right <$> b
+
+pMod :: Parser Mod
+pMod = Mod <$> pEither pModText pModArith
+
+pRange :: Parser Range
+pRange = Range <$> pMod <*> pRangeSpec
+
+pRelDay :: Parser RelDay
+pRelDay = parseList "relative day"
+  [ ("today", Today), ("yesterday", Yesterday)
+  , ("tomorrow", Tomorrow) ]
+
+pAbsolute :: Parser Absolute
+pAbsolute = Absolute <$> pAbsYear <* separator <*> pMonth
+            <* separator <*> pDayOrLast
+
+separator :: Parser ()
+separator = () <$ (char '-' <|> char '/')
+
+parseList
+  :: String
+  -- ^ Description of what we are parsing, for error message
+  -> [(String, a)]
+  -> Parser a
+
+parseList s ls = do
+  str <- some P.letter
+  maybe (fail $ "could not parse " ++ s ++ ": " ++ str)
+    return $ matchAbbrev ls str
+
+
+pMonthAbbrev :: Parser Month
+pMonthAbbrev = parseList "month abbreviation"
+  [ ("jan", Jan), ("feb", Feb), ("mar", Mar), ("apr", Apr)
+  , ("may", May), ("jun", Jun), ("jul", Jul), ("aug", Aug)
+  , ("sep", Sep), ("oct", Oct), ("nov", Nov), ("dec", Dec) ]
+
+pMonthFromDigits :: Parser Month
+pMonthFromDigits = some pDigit >>= parseDigits
+  where
+    parseDigits ls = case ls of
+      [] -> error "pMonthFromDigits: some returned an empty list"
+      d1:[] -> fromOneDigit d1
+      d1:d2:[] -> case d1 of
+        D0 -> fromOneDigit d2
+        D1 -> case d2 of
+          D0 -> return Oct
+          D1 -> return Nov
+          D2 -> return Dec
+          _ -> err
+        _ -> err
+      _ -> err
+      where
+        err = fail $ "invalid month: " ++ map digitChar ls
+        fromOneDigit d = case d of
+          { D0 -> err;
+
+            D1 -> return Jan;  D2 -> return Feb;  D3 -> return Mar;
+            D4 -> return Apr;  D5 -> return May;  D6 -> return Jun;
+            D7 -> return Jul;  D8 -> return Aug;  D9 -> return Sep }
+
+digitChar :: Digit -> Char
+digitChar d = case d of
+  { D0 -> '0'; D1 -> '1'; D2 -> '2'; D3 -> '3'; D4 -> '4';
+    D5 -> '5'; D6 -> '6'; D7 -> '7'; D8 -> '8'; D9 -> '9' }
+
+monthToInt :: Month -> Int
+monthToInt m = case m of
+  { Jan -> 1; Feb -> 2; Mar -> 3; Apr -> 4; May -> 5; Jun -> 6;
+    Jul -> 7; Aug -> 8; Sep -> 9; Oct -> 10; Nov -> 11; Dec -> 12 }
+
+pAbsYear :: Parser AbsYear
+pAbsYear = AbsYear <$> some pDigit
+
+pMonth :: Parser Month
+pMonth = pMonthFromDigits <|> pMonthAbbrev
+
+pDay :: Parser Day
+pDay = Day <$> some pDigit
+
+pLastDay :: Parser LastDay
+pLastDay = LastDay <$ char 'l'
+
+pDayOrLast :: Parser DayOrLast
+pDayOrLast = DayOrLast <$> pEither pDay pLastDay
+
+pRelative :: Parser Relative
+pRelative = Relative <$> pEither pRelDay pRelRange
+
+pRelRange :: Parser RelRange
+pRelRange = RelRange <$> pModArith <* spaces <*> pRangeSpec
+
+pDateSpec :: Parser DateSpec
+pDateSpec = DateSpec <$> pEither pAbsolute pRelative
+
+--
+--
+--
+
+-- | Given a particular range, returns the lower and upper bound of
+-- the indicated span that includes the given number. Calls error if
+-- any of the arguments are negative.
+inRange
+
+  :: Int
+  -- ^ Exponent indicating which range the number must be
+  -- within. For example, 0 returns simply the number as the lower and
+  -- upper result. 1 returns a range that has 10 items. 2 returns a
+  -- range that has 100 items.
+
+  -> Int
+  -- ^ Number we are checking
+
+  -> (Int, Int)
+  -- ^ Lower and upper bounds of range
+
+inRange e n = fromMaybe (error "inRange: negative argument") $ do
+  guard $ e >= 0
+  guard $ n >= 0
+  let size = 10 ^ e
+      rmdr = n `mod` (10 ^ e)
+  return (n - rmdr, (n + (size - rmdr) - 1))
+
+--
+--
+--
+
+calcRange
+  :: T.Day
+  -- ^ Current day
+  -> Range
+  -> Ex.Exceptional String [T.Day]
+calcRange = undefined
+
+weekRange
+  :: DayOfWeek
+  -- ^ Week starts on this day
+  -> T.Day
+  -> [T.Day]
+weekRange dow d = [ lwr .. upr ]
+  where
+    start = case dow of
+      { Sun -> 7; Mon -> 1; Tue -> 2; Wed -> 3; Thu -> 4;
+        Fri -> 5; Sat -> 6 }
+    (_, _, wd) = toWeekDate d
+    lwrAdj = if start > wd then wd + (7 - start) else wd - start
+    lwr = T.addDays (negate . fromIntegral $ lwrAdj) d
+    upr = T.addDays 6 lwr
+
+monthRange :: T.Day -> [T.Day]
+monthRange d = [ lwr .. upr ]
+  where
+    (y, m, _) = T.toGregorian d
+    lwr = T.fromGregorian y m 01
+    upr = T.fromGregorian y m (T.gregorianMonthLength y m)
