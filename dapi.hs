@@ -25,8 +25,6 @@ help pn = unlines
   , ""
   , "--current, -c DATE_SPEC"
   , "  Set current date, used for relative dates"
-  , "--quarter-start, -q MONTH"
-  , "  The first day of quarter 1 is the first day of specified month"
   , "--week-start digit"
   , "  The first day of the week is the specified day"
   , "--format, -f FORMAT_SRING"
@@ -291,35 +289,36 @@ pDateSpec = DateSpec <$> pEither pAbsolute pRelative
 -- any of the arguments are negative.
 inRange
 
-  :: Int
+  :: Integral i
+  => BaseOne
+  -> Int
   -- ^ Exponent indicating which range the number must be
   -- within. For example, 0 returns simply the number as the lower and
   -- upper result. 1 returns a range that has 10 items. 2 returns a
   -- range that has 100 items.
 
-  -> Int
+  -> i
   -- ^ Number we are checking
 
-  -> (Int, Int)
+  -> (i, i)
   -- ^ Lower and upper bounds of range
 
-inRange e n = fromMaybe (error "inRange: negative argument") $ do
+inRange b e n = fromMaybe (error "inRange: negative argument") $ do
   guard $ e >= 0
   guard $ n >= 0
   let size = 10 ^ e
       rmdr = n `mod` (10 ^ e)
-  return (n - rmdr, (n + (size - rmdr) - 1))
+      (pLwr, pUpr) = (n - rmdr, (n + (size - rmdr) - 1))
+  return $ if b
+    then if n `mod` 10 == 0
+         then let lwr' = pLwr - (size - 1)
+              in (lwr', lwr' + (size - 1))
+         else (pLwr + 1, pUpr + 1)
+    else (pLwr, pUpr)
 
 --
 --
 --
-
-calcRange
-  :: T.Day
-  -- ^ Current day
-  -> Range
-  -> Ex.Exceptional String [T.Day]
-calcRange = undefined
 
 weekRange
   :: DayOfWeek
@@ -342,3 +341,74 @@ monthRange d = [ lwr .. upr ]
     (y, m, _) = T.toGregorian d
     lwr = T.fromGregorian y m 01
     upr = T.fromGregorian y m (T.gregorianMonthLength y m)
+
+yearRange :: T.Day -> [T.Day]
+yearRange d = [ lwr .. upr ]
+  where
+    (y, _, _) = T.toGregorian d
+    lwr = T.fromGregorian y 1 1
+    upr = T.fromGregorian y 12 31
+
+type BaseOne = Bool
+
+baseTenRange
+  :: Int
+  -- ^ Exponent to use
+  -> BaseOne -> T.Day -> [T.Day]
+baseTenRange e b d = [ lwr .. upr ]
+  where
+    (y, _, _) = T.toGregorian d
+    (fstYr, lstYr) = inRange b e y
+    lwr = T.fromGregorian fstYr 1 1
+    upr = T.fromGregorian lstYr 12 31
+
+decadeRange :: BaseOne -> T.Day -> [T.Day]
+decadeRange = baseTenRange 1
+
+centuryRange :: BaseOne -> T.Day -> [T.Day]
+centuryRange = baseTenRange 2
+
+quarterRange
+  :: T.Day
+  -> [T.Day]
+quarterRange d =
+  let (by, bm, _) = T.toGregorian d
+      (mFst, mLst) = case () of
+        _ | bm < 4 -> (1, 3)
+          | bm < 7 -> (4, 6)
+          | bm < 10 -> (7, 9)
+          | otherwise -> (10, 12)
+      fstDy = T.fromGregorian by mFst 1
+      lstDy = T.fromGregorian by mLst (T.gregorianMonthLength by mLst)
+  in [fstDy .. lstDy]
+
+millenniumRange :: BaseOne -> T.Day -> [T.Day]
+millenniumRange = baseTenRange 3
+
+calcRange
+  :: DayOfWeek
+  -> BaseOne
+  -> RangeSpec
+  -> T.Day
+  -> [T.Day]
+calcRange dow b1 r = case r of
+  Week -> weekRange dow
+  Month -> monthRange
+  Year -> yearRange
+  Decade -> decadeRange b1
+  Century -> centuryRange b1
+  Millennium -> millenniumRange b1
+  Quarter -> quarterRange
+
+modifyDate :: Mod -> RangeSpec -> T.Day -> T.Day
+modifyDate m r d = case r of
+  Week -> T.addDays (nMod m * 7) d
+
+nMod :: Mod -> Integer
+nMod m = case m of
+  Left t -> case t of
+    This -> 0
+    Next -> 1
+    Last -> (-1)
+  Right (ModArith s ds)
+    
