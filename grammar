@@ -1,0 +1,65 @@
+Here is a grammar for various productions used throughout
+dapi. Terminals are double quoted. All terminals are case insensitive.
+
+range ::= mod rangeSpec
+
+rangeSpec ::= "week" | "month" | "year" | "decade" | "century" |
+"millennium" | "quarter" | "fortnight"
+
+mod ::= modText | modArith
+
+modText ::= "this" | "next" | "last"
+
+modArith ::= sign digits
+
+digits ::= digit+
+
+digit ::= "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
+
+sign ::= "+" | "-"
+
+firstDate ::= datSpec
+lastDate ::= dateSpec
+
+dateSpec ::= absolute | relative
+
+absolute ::= year sep month sep dayOrLast
+
+year ::= digits
+
+sep ::= "/" | "-"
+
+* Months
+
+month ::= digits | monthAbbrev
+
+monthAbbrev ::= "jan" | "feb" | "mar" | "apr" | "may" | "jun" | "jul"
+| "aug" | "sep" | "oct" | "nov" | "dec"
+
+* Day
+
+Last indicates the last day of that month.
+
+day ::= digits
+
+dayOrLast ::= digits | last
+
+last ::= "l"
+
+* Relative
+
+relative ::= relDay | relRange
+
+relDay ::= "today" | "yesterday" | "tomorrow"
+
+relRange ::= modArith rangeSpec
+
+* Day of week
+
+dayOfWeek ::= dowNum | dowLetter | dowName
+
+dowNum ::= "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
+
+dowLetter ::= "M" | "T" | "W" | "R" | "F" | "A" | "U"
+
+dowName ::= "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat"
