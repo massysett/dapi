@@ -1,9 +1,11 @@
 {-# LANGUAGE FlexibleInstances, MultiParamTypeClasses #-}
 module Main where
 
+import Data.Functor.Identity (Identity)
+import Control.Applicative
 import Data.Char (toLower)
+import Data.List (isPrefixOf)
 import qualified Text.Parsec as P
-import qualified Data.Text as X
 
 help :: String -> String
 help pn = unlines
@@ -59,16 +61,80 @@ help pn = unlines
   ]
   
 
-newtype Lower = Lower { unLower :: X.Text }
+newtype Lower = Lower { unLower :: String }
   deriving (Show, Eq)
 
 instance Monad m => P.Stream Lower m Char where
-  uncons (Lower x) = return $ case X.uncons x of
-    Nothing -> Nothing
-    Just (c, r) -> Just (toLower c, Lower r)
+  uncons (Lower x) = return $ case x of
+    [] -> Nothing
+    c:xs -> Just (toLower c, Lower xs)
+
+type Parser = P.ParsecT Lower () Identity
 
 main :: IO ()
 main = undefined
 
-matchAbbrev :: [(String, a)] -> Maybe a
-matchAbbrev = undefined
+matchAbbrev :: [(String, a)] -> String -> Maybe a
+matchAbbrev ls s = case lookup s ls of
+  Just k -> Just k
+  Nothing -> case filter ((s `isPrefixOf`) . fst) ls of
+    (_, v):[] -> Just v
+    _ -> Nothing
+
+data RangeSpec
+  = Week
+  | Month
+  | Year
+  | Decade
+  | Century
+  | Millennium
+  | Quarter
+  deriving (Eq, Show)
+
+data ModText
+  = This
+  | Next
+  | Last
+  deriving (Eq, Show)
+
+data Digit = D0 | D1 | D2 | D3 | D4 | D5 | D6 | D7 | D8 | D9
+  deriving (Eq, Show)
+
+data Sign
+  = Plus
+  | Minus
+  deriving (Eq, Show)
+
+data Month = Jan | Feb | Mar | Apr | May | Jun | Jul | Aug | Sep
+  | Oct | Nov | Dec
+  deriving (Eq, Show)
+
+data RelDay = Today | Yesterday | Tomorrow
+  deriving (Eq, Show)
+
+data ModArith = ModArith Sign [Digit]
+  deriving (Eq, Show)
+
+data Mod = Mod (Either ModText ModArith)
+  deriving (Eq, Show)
+
+data Range = Range Mod RangeSpec
+  deriving (Eq, Show)
+
+data Absolute = Absolute AbsYear Month DayOrLast
+  deriving (Eq, Show)
+
+data AbsYear = AbsYear [Digit]
+  deriving (Eq, Show)
+
+data DayOrLast = DayOrLast (Either Day LastDay)
+  deriving (Eq, Show)
+
+data LastDay = LastDay
+  deriving (Eq, Show)
+
+data Day = Day [Digit]
+  deriving (Eq, Show)
+
+pRangeSpec :: Parser RangeSpec
+pRangeSpec = undefined

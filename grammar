@@ -56,9 +56,7 @@ relRange ::= modArith rangeSpec
 
 * Day of week
 
-dayOfWeek ::= dowNum | dowLetter | dowName
-
-dowNum ::= "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
+dayOfWeek ::= dowLetter | dowName
 
 dowLetter ::= "M" | "T" | "W" | "R" | "F" | "A" | "U"
 
