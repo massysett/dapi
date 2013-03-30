@@ -6,12 +6,12 @@ import Control.Applicative
     (<*>), (<*))
 
 import Control.Monad (guard)
-import qualified Control.Monad.Exception.Synchronous as Ex
+--import qualified Control.Monad.Exception.Synchronous as Ex
 import qualified Data.Time as T
 import Data.Time.Calendar.WeekDate (toWeekDate)
 import Data.Functor.Identity (Identity)
 import Data.Char (toLower)
-import Data.List (isPrefixOf)
+import Data.List (isPrefixOf, foldl')
 import Data.Maybe (fromMaybe)
 import Text.Parsec (char)
 import qualified Text.Parsec as P
@@ -88,26 +88,24 @@ matchAbbrev ls s = case lookup s ls of
     (_, v):[] -> Just v
     _ -> Nothing
 
-data DateSpec = DateSpec (Either Absolute Relative)
-  deriving (Eq, Show)
-
-data RangeSpec
-  = Week
-  | Month
-  | Year
-  | Decade
-  | Century
-  | Millennium
-  | Quarter
-  deriving (Eq, Show)
-
-data ModText
-  = This
-  | Next
-  | Last
-  deriving (Eq, Show)
+--
+-- Date types - beginning with most primitive
+--
 
 data Digit = D0 | D1 | D2 | D3 | D4 | D5 | D6 | D7 | D8 | D9
+  deriving (Eq, Show)
+
+digitToInt :: Integral i => Digit -> i
+digitToInt d = case d of
+  { D0 -> 0; D1 -> 1; D2 -> 2; D3 -> 3; D4 -> 4; D5 -> 5;
+    D6 -> 6; D7 -> 7; D8 -> 8; D9 -> 9 }
+
+digitsToInt :: Integral i => [Digit] -> i
+digitsToInt = foldl' f 0 . zip [ (0 :: Int) ..] . reverse
+  where
+    f tot (places, d) = tot + ((10 ^ places) * digitToInt d)
+
+data Day = Day [Digit]
   deriving (Eq, Show)
 
 data Sign
@@ -119,41 +117,223 @@ data Month = Jan | Feb | Mar | Apr | May | Jun | Jul | Aug | Sep
   | Oct | Nov | Dec
   deriving (Eq, Show)
 
-data RelDay = Today | Yesterday | Tomorrow
-  deriving (Eq, Show)
-
-data ModArith = ModArith Sign [Digit]
-  deriving (Eq, Show)
-
-data Mod = Mod (Either ModText ModArith)
-  deriving (Eq, Show)
-
-data Range = Range Mod RangeSpec
-  deriving (Eq, Show)
-
-data Absolute = Absolute AbsYear Month DayOrLast
-  deriving (Eq, Show)
-
 data AbsYear = AbsYear [Digit]
-  deriving (Eq, Show)
-
-data DayOrLast = DayOrLast (Either Day LastDay)
   deriving (Eq, Show)
 
 data LastDay = LastDay
   deriving (Eq, Show)
 
-data Day = Day [Digit]
+data DayOfWeek = Sun | Mon | Tue | Wed | Thu | Fri | Sat
   deriving (Eq, Show)
+
+-- | The command line can contain dates or, alternatively, a single
+-- range. A DateSpec represents one of the two dates if the user chose
+-- to use dates.
+data DateSpec = DateSpec (Either Absolute Relative)
+  deriving (Eq, Show)
+
+dayDateSpec
+  :: T.Day -> DateSpec -> Maybe T.Day
+dayDateSpec d (DateSpec ds) = case ds of
+  Left ab -> dayAbsolute ab
+  Right rel -> Just $ dayRelative d rel
+
+--
+-- Absolute dates
+--
+
+data DayOrLast = DayOrLast (Either Day LastDay)
+  deriving (Eq, Show)
+
+-- | A single absolute date. Can be derived without any relative date
+-- information.
+data Absolute = Absolute AbsYear Month DayOrLast
+  deriving (Eq, Show)
+
+dayAbsolute :: Absolute -> Maybe T.Day
+dayAbsolute (Absolute (AbsYear yds) m (DayOrLast dl)) =
+  let yr = digitsToInt yds
+      mo = monthToInt m
+      da = case dl of
+        Left (Day d) -> digitsToInt d
+        Right _ -> T.gregorianMonthLength yr mo
+  in T.fromGregorianValid yr mo da
+
+--
+-- Relative dates
+--
+data ModArith = ModArith Sign [Digit]
+  deriving (Eq, Show)
+
+nModArith :: Integral i => ModArith -> i
+nModArith (ModArith s ds) = flipSign (digitsToInt ds)
+  where
+    flipSign = case s of { Plus -> id; Minus -> negate }
+ 
+data RelDay = Today | Yesterday | Tomorrow
+  deriving (Eq, Show)
+
+relDayToInt :: Integral i => RelDay -> i
+relDayToInt d = case d of
+  Today -> 0
+  Yesterday -> (-1)
+  Tomorrow -> 1
+
+dayRelDay :: RelDay -> T.Day -> T.Day
+dayRelDay r = T.addDays (relDayToInt r)
 
 data RelRange = RelRange ModArith RangeSpec
   deriving (Eq, Show)
 
-data DayOfWeek = Sun | Mon | Tue | Wed | Thu | Fri | Sat
-  deriving (Eq, Show)
+dayRelRange :: T.Day -> RelRange -> T.Day
+dayRelRange d (RelRange m s) = modifyDate (Mod (Right m)) s d
 
 data Relative = Relative (Either RelDay RelRange)
   deriving (Eq, Show)
+
+dayRelative :: T.Day -> Relative -> T.Day
+dayRelative d (Relative e) = case e of
+  Left rd -> dayRelDay rd d
+  Right rr -> dayRelRange d rr
+
+--
+-- Ranges
+--
+
+data RangeSpec
+  = Week
+  | Month
+  | Year
+  | Decade
+  | Century
+  | Millennium
+  | Quarter
+  deriving (Eq, Show)
+
+weekRange
+  :: DayOfWeek
+  -- ^ Week starts on this day
+  -> T.Day
+  -> [T.Day]
+weekRange dow d = [ lwr .. upr ]
+  where
+    start = case dow of
+      { Sun -> 7; Mon -> 1; Tue -> 2; Wed -> 3; Thu -> 4;
+        Fri -> 5; Sat -> 6 }
+    (_, _, wd) = toWeekDate d
+    lwrAdj = if start > wd then wd + (7 - start) else wd - start
+    lwr = T.addDays (negate . fromIntegral $ lwrAdj) d
+    upr = T.addDays 6 lwr
+
+monthRange :: T.Day -> [T.Day]
+monthRange d = [ lwr .. upr ]
+  where
+    (y, m, _) = T.toGregorian d
+    lwr = T.fromGregorian y m 01
+    upr = T.fromGregorian y m (T.gregorianMonthLength y m)
+
+yearRange :: T.Day -> [T.Day]
+yearRange d = [ lwr .. upr ]
+  where
+    (y, _, _) = T.toGregorian d
+    lwr = T.fromGregorian y 1 1
+    upr = T.fromGregorian y 12 31
+
+type BaseOne = Bool
+
+baseTenRange
+  :: Int
+  -- ^ Exponent to use
+  -> BaseOne -> T.Day -> [T.Day]
+baseTenRange e b d = [ lwr .. upr ]
+  where
+    (y, _, _) = T.toGregorian d
+    (fstYr, lstYr) = inRange b e y
+    lwr = T.fromGregorian fstYr 1 1
+    upr = T.fromGregorian lstYr 12 31
+
+decadeRange :: BaseOne -> T.Day -> [T.Day]
+decadeRange = baseTenRange 1
+
+centuryRange :: BaseOne -> T.Day -> [T.Day]
+centuryRange = baseTenRange 2
+
+quarterRange
+  :: T.Day
+  -> [T.Day]
+quarterRange d =
+  let (by, bm, _) = T.toGregorian d
+      (mFst, mLst) = case () of
+        _ | bm < 4 -> (1, 3)
+          | bm < 7 -> (4, 6)
+          | bm < 10 -> (7, 9)
+          | otherwise -> (10, 12)
+      fstDy = T.fromGregorian by mFst 1
+      lstDy = T.fromGregorian by mLst (T.gregorianMonthLength by mLst)
+  in [fstDy .. lstDy]
+
+millenniumRange :: BaseOne -> T.Day -> [T.Day]
+millenniumRange = baseTenRange 3
+
+rangeSpecToList
+  :: DayOfWeek
+  -> BaseOne
+  -> RangeSpec
+  -> T.Day
+  -> [T.Day]
+rangeSpecToList dow b1 r = case r of
+  Week -> weekRange dow
+  Month -> monthRange
+  Year -> yearRange
+  Decade -> decadeRange b1
+  Century -> centuryRange b1
+  Millennium -> millenniumRange b1
+  Quarter -> quarterRange
+
+data ModText
+  = This
+  | Next
+  | Last
+  deriving (Eq, Show)
+
+data Mod = Mod (Either ModText ModArith)
+  deriving (Eq, Show)
+
+nMod :: Mod -> Integer
+nMod (Mod m) = case m of
+  Left t -> case t of
+    This -> 0
+    Next -> 1
+    Last -> (-1)
+  Right ma -> nModArith ma
+
+modifyDate :: Mod -> RangeSpec -> T.Day -> T.Day
+modifyDate m r d =
+  let n = nMod m
+  in case r of
+      Week -> T.addDays (n * 7) d
+      Month -> T.addGregorianMonthsClip n d
+      Year -> T.addGregorianYearsClip n d
+      Decade -> T.addGregorianYearsClip (n * 10) d
+      Century -> T.addGregorianYearsClip (n * 100) d
+      Millennium -> T.addGregorianYearsClip (n * 1000) d
+      Quarter -> T.addGregorianMonthsClip (n * 3) d
+
+data Range = Range Mod RangeSpec
+  deriving (Eq, Show)
+
+rangeToList
+  :: DayOfWeek
+  -> BaseOne
+  -> T.Day
+  -- ^ Current day
+  -> Range
+  -> [T.Day]
+rangeToList dow b d (Range m r) = rangeSpecToList dow b r (modifyDate m r d)
+
+--
+-- Parsers
+--
 
 pRangeSpec :: Parser RangeSpec
 pRangeSpec = parseList "range specification"
@@ -317,98 +497,10 @@ inRange b e n = fromMaybe (error "inRange: negative argument") $ do
     else (pLwr, pUpr)
 
 --
+-- Parsing the command line
 --
---
 
-weekRange
-  :: DayOfWeek
-  -- ^ Week starts on this day
-  -> T.Day
-  -> [T.Day]
-weekRange dow d = [ lwr .. upr ]
-  where
-    start = case dow of
-      { Sun -> 7; Mon -> 1; Tue -> 2; Wed -> 3; Thu -> 4;
-        Fri -> 5; Sat -> 6 }
-    (_, _, wd) = toWeekDate d
-    lwrAdj = if start > wd then wd + (7 - start) else wd - start
-    lwr = T.addDays (negate . fromIntegral $ lwrAdj) d
-    upr = T.addDays 6 lwr
-
-monthRange :: T.Day -> [T.Day]
-monthRange d = [ lwr .. upr ]
-  where
-    (y, m, _) = T.toGregorian d
-    lwr = T.fromGregorian y m 01
-    upr = T.fromGregorian y m (T.gregorianMonthLength y m)
-
-yearRange :: T.Day -> [T.Day]
-yearRange d = [ lwr .. upr ]
-  where
-    (y, _, _) = T.toGregorian d
-    lwr = T.fromGregorian y 1 1
-    upr = T.fromGregorian y 12 31
-
-type BaseOne = Bool
-
-baseTenRange
-  :: Int
-  -- ^ Exponent to use
-  -> BaseOne -> T.Day -> [T.Day]
-baseTenRange e b d = [ lwr .. upr ]
-  where
-    (y, _, _) = T.toGregorian d
-    (fstYr, lstYr) = inRange b e y
-    lwr = T.fromGregorian fstYr 1 1
-    upr = T.fromGregorian lstYr 12 31
-
-decadeRange :: BaseOne -> T.Day -> [T.Day]
-decadeRange = baseTenRange 1
-
-centuryRange :: BaseOne -> T.Day -> [T.Day]
-centuryRange = baseTenRange 2
-
-quarterRange
-  :: T.Day
-  -> [T.Day]
-quarterRange d =
-  let (by, bm, _) = T.toGregorian d
-      (mFst, mLst) = case () of
-        _ | bm < 4 -> (1, 3)
-          | bm < 7 -> (4, 6)
-          | bm < 10 -> (7, 9)
-          | otherwise -> (10, 12)
-      fstDy = T.fromGregorian by mFst 1
-      lstDy = T.fromGregorian by mLst (T.gregorianMonthLength by mLst)
-  in [fstDy .. lstDy]
-
-millenniumRange :: BaseOne -> T.Day -> [T.Day]
-millenniumRange = baseTenRange 3
-
-calcRange
-  :: DayOfWeek
-  -> BaseOne
-  -> RangeSpec
-  -> T.Day
-  -> [T.Day]
-calcRange dow b1 r = case r of
-  Week -> weekRange dow
-  Month -> monthRange
-  Year -> yearRange
-  Decade -> decadeRange b1
-  Century -> centuryRange b1
-  Millennium -> millenniumRange b1
-  Quarter -> quarterRange
-
-modifyDate :: Mod -> RangeSpec -> T.Day -> T.Day
-modifyDate m r d = case r of
-  Week -> T.addDays (nMod m * 7) d
-
-nMod :: Mod -> Integer
-nMod m = case m of
-  Left t -> case t of
-    This -> 0
-    Next -> 1
-    Last -> (-1)
-  Right (ModArith s ds)
-    
+parseArgs :: [String] -> Ex.Exceptional String [T.Day]
+parseArgs ss = case ss of
+  [] -> Ex.throw "no dates given on command line."
+  x:[] -> 
