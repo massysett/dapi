@@ -4,14 +4,14 @@ dapi. Terminals are double quoted. All terminals are case insensitive.
 
 range ::= moddedUnit | datedRange
 
-datedRange ::= dateSpec rangeSep? dateSpec
+datedRange ::= dateSpec rangeSep dateSpec
 
-rangeSep ::= "-" | "to"
+rangeSep ::= "-"
 
 moddedUnit ::= mod unit
 
-unit ::= "week" | "month" | "year" | "decade" | "century" |
-"millennium" | "quarter" | "fortnight"
+unit ::= "days" | "weeks" | "months" | "years" | "decades" | "century" |
+"millennium" | "quarters"
 
 mod ::= modText | modArith
 
@@ -24,9 +24,6 @@ digits ::= digit+
 digit ::= "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
 
 sign ::= "+" | "-"
-
-firstDate ::= dateSpec
-lastDate ::= dateSpec
 
 dateSpec ::= absolute | relative
 

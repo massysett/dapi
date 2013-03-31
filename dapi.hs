@@ -4,7 +4,7 @@ module Main where
 
 import Control.Applicative
   ( many, (<$), (<|>), some, (<$>),
-    (<*>), (<*))
+    (<*>), (<*) )
 
 import Control.Monad (guard, (>=>), when)
 import qualified Control.Monad.Exception.Synchronous as Ex
@@ -49,8 +49,7 @@ myOpts = Opts
 
 help :: String -> String
 help pn = unlines
-  [ "usage: " ++ pn ++ " [options] FIRST_DATE LAST_DATE"
-  , " or " ++ pn ++ " [options] RANGE"
+  [ "usage: " ++ pn ++ " [options] RANGE..."
   , ""
   , "Options:"
   , ""
@@ -102,7 +101,7 @@ help pn = unlines
   , "--open, --close - open or close parenthesis"
   , "  (error with RPN)"
   ]
-  
+
 
 newtype Lower = Lower { unLower :: String }
   deriving (Show, Eq)
@@ -240,7 +239,8 @@ dayRelative d (Relative e) = case e of
 --
 
 data Unit
-  = Week
+  = UDay
+  | Week
   | Month
   | Year
   | Decade
@@ -321,6 +321,7 @@ unitToList
   -> T.Day
   -> [T.Day]
 unitToList dow b1 r = case r of
+  UDay -> (:[])
   Week -> weekList dow
   Month -> monthList
   Year -> yearList
@@ -350,6 +351,7 @@ modifyDate :: Mod -> Unit -> T.Day -> T.Day
 modifyDate m r d =
   let n = nMod m
   in case r of
+      UDay -> T.addDays n d
       Week -> T.addDays (n * 7) d
       Month -> T.addGregorianMonthsClip n d
       Year -> T.addGregorianYearsClip n d
@@ -361,14 +363,38 @@ modifyDate m r d =
 data ModdedUnit = ModdedUnit Mod Unit
   deriving (Eq, Show)
 
-rangeToList
+moddedUnitToList
   :: DayOfWeek
   -> BaseOne
   -> T.Day
   -- ^ Current day
   -> ModdedUnit
   -> [T.Day]
-rangeToList dow b d (ModdedUnit m r) = unitToList dow b r (modifyDate m r d)
+moddedUnitToList dow b d (ModdedUnit m r) = unitToList dow b r (modifyDate m r d)
+
+data DatedRange = DatedRange DateSpec DateSpec
+  deriving (Eq, Show)
+
+datedRangeToList
+  :: T.Day
+  -> DatedRange
+  -> Ex.Exceptional String [T.Day]
+datedRangeToList b (DatedRange a1 a2) = do
+  d1 <- Ex.fromMaybe "invalid first date given" $ dayDateSpec b a1
+  d2 <- Ex.fromMaybe "invalid second date given" $ dayDateSpec d1 a2
+  return $ unfoldr (calcNextDay d2) d1
+
+data Range = Range (Either ModdedUnit DatedRange)
+  deriving (Eq, Show)
+
+rangeToList
+  :: DayOfWeek
+  -> BaseOne
+  -> T.Day
+  -> Range
+  -> Ex.Exceptional String [T.Day]
+rangeToList dow b1 d (Range r) =
+  either (return . moddedUnitToList dow b1 d) (datedRangeToList d) r
 
 --
 -- Parsers
@@ -376,9 +402,10 @@ rangeToList dow b d (ModdedUnit m r) = unitToList dow b r (modifyDate m r d)
 
 pUnit :: Parser Unit
 pUnit = parseList "range specification"
-  [ ("week", Week), ("month", Month), ("year", Year)
-  , ("decade", Decade), ("century", Century)
-  , ("millennium", Millennium), ("quarter", Quarter) ]
+  [ ("days", UDay), ("weeks", Week), ("months", Month)
+  , ("years", Year)
+  , ("decades", Decade), ("century", Century)
+  , ("millennium", Millennium), ("quarters", Quarter) ]
 
 pModText :: Parser ModText
 pModText = parseList "modifier"
@@ -429,7 +456,7 @@ parseList
   -> [(String, a)]
   -> Parser a
 
-parseList s ls = do
+parseList s ls = P.try $ do
   str <- some P.letter
   maybe (fail $ "could not parse " ++ s ++ ": " ++ str)
     return $ matchAbbrev ls str
@@ -437,9 +464,10 @@ parseList s ls = do
 
 pMonthAbbrev :: Parser Month
 pMonthAbbrev = parseList "month abbreviation"
-  [ ("jan", Jan), ("feb", Feb), ("mar", Mar), ("apr", Apr)
-  , ("may", May), ("jun", Jun), ("jul", Jul), ("aug", Aug)
-  , ("sep", Sep), ("oct", Oct), ("nov", Nov), ("dec", Dec) ]
+  [ ("january", Jan), ("february", Feb), ("march", Mar),
+    ("april", Apr) , ("may", May), ("june", Jun), ("july", Jul),
+    ("august", Aug) , ("september", Sep), ("october", Oct),
+    ("november", Nov), ("december", Dec) ]
 
 pMonthFromDigits :: Parser Month
 pMonthFromDigits = some pDigit >>= parseDigits
@@ -499,6 +527,17 @@ pRelByUnit = RelByUnit <$> pModArith <* spaces <*> pUnit
 pDateSpec :: Parser DateSpec
 pDateSpec = DateSpec <$> pEither pAbsolute pRelative
 
+pDatedRange :: Parser DatedRange
+pDatedRange
+  = DatedRange
+  <$> pDateSpec
+  <*  spaces
+  <* (() <$ char '-')
+  <* spaces
+  <*> pDateSpec
+
+pRange :: Parser Range
+pRange = Range <$> pEither pModdedUnit pDatedRange
 
 --
 --
@@ -546,30 +585,12 @@ parseArgs
   -> T.Day
   -> [String]
   -> Ex.Exceptional String [T.Day]
-parseArgs dow b1 d ss = case ss of
-  [] -> Ex.throw "no dates given on command line."
-  x:[] -> case P.parse (pModdedUnit <* P.eof) "" (Lower x) of
-    Left e -> Ex.throw $ "could not parse range: " ++ show e
-    Right r -> return $ rangeToList dow b1 d r
-  x1:x2:[] -> do
-    a1 <- case P.parse (pDateSpec <* P.eof) "" (Lower x1) of
-      Left e -> Ex.throw $ "could not parse first date: " ++ show e
-      Right r -> return r
-    a2 <- case P.parse (pDateSpec <* P.eof) "" (Lower x2) of
-      Left e -> Ex.throw $ "could not parse second date: " ++ show e
-      Right r -> return r
-    datesToList d a1 a2
-  _ -> Ex.throw "too many command line arguments."
+parseArgs dow b1 d = fmap concat . mapM parse
+  where
+    parse s = case P.parse (pRange <* P.eof) "" (Lower s) of
+      Left e -> Ex.throw $ "could not parse range: " ++ show e
+      Right r -> rangeToList dow b1 d r
 
-datesToList
-  :: T.Day
-  -> DateSpec
-  -> DateSpec
-  -> Ex.Exceptional String [T.Day]
-datesToList b a1 a2 = do
-  d1 <- Ex.fromMaybe "invalid first date given" $ dayDateSpec b a1
-  d2 <- Ex.fromMaybe "invalid second date given" $ dayDateSpec d1 a2
-  return $ unfoldr (calcNextDay d2) d1
 
 calcNextDay
   :: T.Day
