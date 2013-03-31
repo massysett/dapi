@@ -30,3 +30,7 @@ executable dapi
     , transformers ==0.3.*
     , time ==1.4.*
     , explicit-exception ==0.1.*
+    , prednote ==0.5.*
+    , multiarg ==0.12.*
+    , old-locale ==1.0.*
+    , rainbow ==0.2.*
