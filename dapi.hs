@@ -221,25 +221,25 @@ relDayToInt d = case d of
 dayRelDay :: RelDay -> T.Day -> T.Day
 dayRelDay r = T.addDays (relDayToInt r)
 
-data RelRange = RelRange ModArith RangeSpec
+data RelByUnit = RelByUnit ModArith Unit
   deriving (Eq, Show)
 
-dayRelRange :: T.Day -> RelRange -> T.Day
-dayRelRange d (RelRange m s) = modifyDate (Mod (Right m)) s d
+dayRelByUnit :: T.Day -> RelByUnit -> T.Day
+dayRelByUnit d (RelByUnit m s) = modifyDate (Mod (Right m)) s d
 
-data Relative = Relative (Either RelDay RelRange)
+data Relative = Relative (Either RelDay RelByUnit)
   deriving (Eq, Show)
 
 dayRelative :: T.Day -> Relative -> T.Day
 dayRelative d (Relative e) = case e of
   Left rd -> dayRelDay rd d
-  Right rr -> dayRelRange d rr
+  Right rr -> dayRelByUnit d rr
 
 --
 -- Ranges
 --
 
-data RangeSpec
+data Unit
   = Week
   | Month
   | Year
@@ -314,13 +314,13 @@ quarterRange d =
 millenniumRange :: BaseOne -> T.Day -> [T.Day]
 millenniumRange = baseTenRange 3
 
-rangeSpecToList
+unitToList
   :: DayOfWeek
   -> BaseOne
-  -> RangeSpec
+  -> Unit
   -> T.Day
   -> [T.Day]
-rangeSpecToList dow b1 r = case r of
+unitToList dow b1 r = case r of
   Week -> weekRange dow
   Month -> monthRange
   Year -> yearRange
@@ -346,7 +346,7 @@ nMod (Mod m) = case m of
     Last -> (-1)
   Right ma -> nModArith ma
 
-modifyDate :: Mod -> RangeSpec -> T.Day -> T.Day
+modifyDate :: Mod -> Unit -> T.Day -> T.Day
 modifyDate m r d =
   let n = nMod m
   in case r of
@@ -358,7 +358,7 @@ modifyDate m r d =
       Millennium -> T.addGregorianYearsClip (n * 1000) d
       Quarter -> T.addGregorianMonthsClip (n * 3) d
 
-data Range = Range Mod RangeSpec
+data Range = Range Mod Unit
   deriving (Eq, Show)
 
 rangeToList
@@ -368,14 +368,14 @@ rangeToList
   -- ^ Current day
   -> Range
   -> [T.Day]
-rangeToList dow b d (Range m r) = rangeSpecToList dow b r (modifyDate m r d)
+rangeToList dow b d (Range m r) = unitToList dow b r (modifyDate m r d)
 
 --
 -- Parsers
 --
 
-pRangeSpec :: Parser RangeSpec
-pRangeSpec = parseList "range specification"
+pUnit :: Parser Unit
+pUnit = parseList "range specification"
   [ ("week", Week), ("month", Month), ("year", Year)
   , ("decade", Decade), ("century", Century)
   , ("millennium", Millennium), ("quarter", Quarter) ]
@@ -409,7 +409,7 @@ pMod :: Parser Mod
 pMod = Mod <$> pEither pModText pModArith
 
 pRange :: Parser Range
-pRange = Range <$> pMod <* spaces <*> pRangeSpec
+pRange = Range <$> pMod <* spaces <*> pUnit
 
 pRelDay :: Parser RelDay
 pRelDay = parseList "relative day"
@@ -491,10 +491,10 @@ pDayOrLast :: Parser DayOrLast
 pDayOrLast = DayOrLast <$> pEither pDay pLastDay
 
 pRelative :: Parser Relative
-pRelative = Relative <$> pEither pRelDay pRelRange
+pRelative = Relative <$> pEither pRelDay pRelByUnit
 
-pRelRange :: Parser RelRange
-pRelRange = RelRange <$> pModArith <* spaces <*> pRangeSpec
+pRelByUnit :: Parser RelByUnit
+pRelByUnit = RelByUnit <$> pModArith <* spaces <*> pUnit
 
 pDateSpec :: Parser DateSpec
 pDateSpec = DateSpec <$> pEither pAbsolute pRelative

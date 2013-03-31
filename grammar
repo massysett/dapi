@@ -1,9 +1,16 @@
 Here is a grammar for various productions used throughout
 dapi. Terminals are double quoted. All terminals are case insensitive.
 
-range ::= mod rangeSpec
 
-rangeSpec ::= "week" | "month" | "year" | "decade" | "century" |
+range ::= moddedUnit | datedRange
+
+datedRange ::= dateSpec rangeSep? dateSpec
+
+rangeSep ::= "-" | "to"
+
+moddedUnit ::= mod unit
+
+unit ::= "week" | "month" | "year" | "decade" | "century" |
 "millennium" | "quarter" | "fortnight"
 
 mod ::= modText | modArith
@@ -48,11 +55,11 @@ last ::= "l"
 
 * Relative
 
-relative ::= relDay | relRange
+relative ::= relDay | relByUnit
 
 relDay ::= "today" | "yesterday" | "tomorrow"
 
-relRange ::= modArith rangeSpec
+relByUnit ::= modArith unit
 
 * Day of week
 
