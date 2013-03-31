@@ -39,7 +39,7 @@ myOpts :: Opts
 myOpts = Opts
   { oWeekStart = Sun
   , oBase = False
-  , oFormat = "%Y-%m-%d\n"
+  , oFormat = "%Y-%m-%d"
   , oExprDesc = Exp.RPN
   , oShowExpression = False
   , oVerboseFilter = False
@@ -569,7 +569,7 @@ datesToList
 datesToList b a1 a2 = do
   d1 <- Ex.fromMaybe "invalid first date given" $ dayDateSpec b a1
   d2 <- Ex.fromMaybe "invalid second date given" $ dayDateSpec d1 a2
-  return $ unfoldr (calcNextDay d1) d2
+  return $ unfoldr (calcNextDay d2) d1
 
 calcNextDay
   :: T.Day
@@ -586,7 +586,7 @@ calcNextDay stop d =
   then Nothing
   else let amtToAdd = if d < stop then 1 else (-1)
            nextDay = T.addDays amtToAdd d
-       in Just (nextDay, nextDay)
+       in Just (d, nextDay)
 
 dayInfos :: [T.Day] -> [DayInfo]
 dayInfos ds = zipWith3 f fwds baks ds
@@ -909,8 +909,11 @@ parseOptsInfos os = do
 main :: IO ()
 main = do
   (po, infos) <- parseOptsInfos myOpts
-  pdct <- Ex.switch (errExit . X.unpack) return
-          $ Exp.parseExpression (pExprDesc po) (pOperands po)
+  pdct <-
+    if null (pOperands po)
+    then return Pd.always
+    else Ex.switch (errExit . X.unpack) return
+         $ Exp.parseExpression (pExprDesc po) (pOperands po)
   t <- R.smartTermFromEnv (pColorToFile po) IO.stdout
   let printer = R.printChunks t 
   when (pShowExpression po) $ do
@@ -928,4 +931,4 @@ main = do
         then Just (iDay info)
         else Nothing
       days = catMaybes . map remover $ zip infos (map fst pairs)
-  mapM_ putStr (map (T.formatTime defaultTimeLocale (pFormat po)) days)
+  mapM_ putStrLn (map (T.formatTime defaultTimeLocale (pFormat po)) days)
