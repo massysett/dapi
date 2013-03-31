@@ -15,6 +15,7 @@ import Data.Char (toLower)
 import Data.Either (partitionEithers)
 import Data.List (isPrefixOf, foldl', unfoldr)
 import Data.Maybe (fromMaybe, catMaybes)
+import Data.Monoid ((<>))
 import qualified Data.Text as X
 import Data.Text (Text)
 import qualified Data.Prednote.Expressions as Exp
@@ -941,7 +942,10 @@ main = do
     putStr $ "Filter expression:\n\n"
     printer $ Pd.showPdct 2 0 pdct
     putStr "\n"
-  let doEval x = Pd.evaluate 2 True x 0 pdct
+  let doEval x =
+        let renamer txt = (X.pack . show . iDay $ x) <> " - " <> txt
+            pdct' = Pd.rename renamer pdct
+        in Pd.evaluate 2 True x 0 pdct'
       pairs = map doEval infos
   when (pVerboseFilter po) $ do
     putStr $ "Verbose evaluation:\n\n"
