@@ -249,12 +249,12 @@ data Unit
   | Quarter
   deriving (Eq, Show)
 
-weekRange
+weekList
   :: DayOfWeek
   -- ^ Week starts on this day
   -> T.Day
   -> [T.Day]
-weekRange dow d = [ lwr .. upr ]
+weekList dow d = [ lwr .. upr ]
   where
     start = case dow of
       { Sun -> 7; Mon -> 1; Tue -> 2; Wed -> 3; Thu -> 4;
@@ -264,15 +264,15 @@ weekRange dow d = [ lwr .. upr ]
     lwr = T.addDays (negate . fromIntegral $ lwrAdj) d
     upr = T.addDays 6 lwr
 
-monthRange :: T.Day -> [T.Day]
-monthRange d = [ lwr .. upr ]
+monthList :: T.Day -> [T.Day]
+monthList d = [ lwr .. upr ]
   where
     (y, m, _) = T.toGregorian d
     lwr = T.fromGregorian y m 01
     upr = T.fromGregorian y m (T.gregorianMonthLength y m)
 
-yearRange :: T.Day -> [T.Day]
-yearRange d = [ lwr .. upr ]
+yearList :: T.Day -> [T.Day]
+yearList d = [ lwr .. upr ]
   where
     (y, _, _) = T.toGregorian d
     lwr = T.fromGregorian y 1 1
@@ -291,16 +291,16 @@ baseTenRange e b d = [ lwr .. upr ]
     lwr = T.fromGregorian fstYr 1 1
     upr = T.fromGregorian lstYr 12 31
 
-decadeRange :: BaseOne -> T.Day -> [T.Day]
-decadeRange = baseTenRange 1
+decadeList :: BaseOne -> T.Day -> [T.Day]
+decadeList = baseTenRange 1
 
-centuryRange :: BaseOne -> T.Day -> [T.Day]
-centuryRange = baseTenRange 2
+centuryList :: BaseOne -> T.Day -> [T.Day]
+centuryList = baseTenRange 2
 
-quarterRange
+quarterList
   :: T.Day
   -> [T.Day]
-quarterRange d =
+quarterList d =
   let (by, bm, _) = T.toGregorian d
       (mFst, mLst) = case () of
         _ | bm < 4 -> (1, 3)
@@ -311,8 +311,8 @@ quarterRange d =
       lstDy = T.fromGregorian by mLst (T.gregorianMonthLength by mLst)
   in [fstDy .. lstDy]
 
-millenniumRange :: BaseOne -> T.Day -> [T.Day]
-millenniumRange = baseTenRange 3
+millenniumList :: BaseOne -> T.Day -> [T.Day]
+millenniumList = baseTenRange 3
 
 unitToList
   :: DayOfWeek
@@ -321,13 +321,13 @@ unitToList
   -> T.Day
   -> [T.Day]
 unitToList dow b1 r = case r of
-  Week -> weekRange dow
-  Month -> monthRange
-  Year -> yearRange
-  Decade -> decadeRange b1
-  Century -> centuryRange b1
-  Millennium -> millenniumRange b1
-  Quarter -> quarterRange
+  Week -> weekList dow
+  Month -> monthList
+  Year -> yearList
+  Decade -> decadeList b1
+  Century -> centuryList b1
+  Millennium -> millenniumList b1
+  Quarter -> quarterList
 
 data ModText
   = This
@@ -358,7 +358,7 @@ modifyDate m r d =
       Millennium -> T.addGregorianYearsClip (n * 1000) d
       Quarter -> T.addGregorianMonthsClip (n * 3) d
 
-data Range = Range Mod Unit
+data ModdedUnit = ModdedUnit Mod Unit
   deriving (Eq, Show)
 
 rangeToList
@@ -366,9 +366,9 @@ rangeToList
   -> BaseOne
   -> T.Day
   -- ^ Current day
-  -> Range
+  -> ModdedUnit
   -> [T.Day]
-rangeToList dow b d (Range m r) = unitToList dow b r (modifyDate m r d)
+rangeToList dow b d (ModdedUnit m r) = unitToList dow b r (modifyDate m r d)
 
 --
 -- Parsers
@@ -408,8 +408,8 @@ pEither a b = Left <$> a <|> Right <$> b
 pMod :: Parser Mod
 pMod = Mod <$> pEither pModText pModArith
 
-pRange :: Parser Range
-pRange = Range <$> pMod <* spaces <*> pUnit
+pModdedUnit :: Parser ModdedUnit
+pModdedUnit = ModdedUnit <$> pMod <* spaces <*> pUnit
 
 pRelDay :: Parser RelDay
 pRelDay = parseList "relative day"
@@ -548,7 +548,7 @@ parseArgs
   -> Ex.Exceptional String [T.Day]
 parseArgs dow b1 d ss = case ss of
   [] -> Ex.throw "no dates given on command line."
-  x:[] -> case P.parse (pRange <* P.eof) "" (Lower x) of
+  x:[] -> case P.parse (pModdedUnit <* P.eof) "" (Lower x) of
     Left e -> Ex.throw $ "could not parse range: " ++ show e
     Right r -> return $ rangeToList dow b1 d r
   x1:x2:[] -> do
