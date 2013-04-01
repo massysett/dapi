@@ -4,7 +4,7 @@ module Main where
 
 import Control.Applicative
   ( many, (<$), (<|>), some, (<$>),
-    (<*>), (<*) )
+    (<*>), (<*), optional )
 
 import Control.Monad (guard, (>=>), when)
 import qualified Control.Monad.Exception.Synchronous as Ex
@@ -23,6 +23,7 @@ import qualified Data.Prednote.Pdct as Pd
 import Data.Prednote.Pdct ((|||))
 import Text.Parsec (char)
 import qualified Text.Parsec as P
+import Text.Parsec ((<?>))
 import qualified System.Console.MultiArg as MA
 import qualified System.IO as IO
 import qualified System.Exit as Exit
@@ -154,7 +155,7 @@ data Sign
 
 data Month = Jan | Feb | Mar | Apr | May | Jun | Jul | Aug | Sep
   | Oct | Nov | Dec
-  deriving (Eq, Show, Ord)
+  deriving (Eq, Show, Ord, Enum, Bounded)
 
 data AbsYear = AbsYear [Digit]
   deriving (Eq, Show)
@@ -163,7 +164,7 @@ data LastDay = LastDay
   deriving (Eq, Show)
 
 data DayOfWeek = Sun | Mon | Tue | Wed | Thu | Fri | Sat
-  deriving (Eq, Show, Ord)
+  deriving (Eq, Show, Ord, Enum, Bounded)
 
 -- | The command line can contain dates or, alternatively, a single
 -- range. A DateSpec represents one of the two dates if the user chose
@@ -172,10 +173,10 @@ data DateSpec = DateSpec (Either Absolute Relative)
   deriving (Eq, Show)
 
 dayDateSpec
-  :: T.Day -> DateSpec -> Maybe T.Day
-dayDateSpec d (DateSpec ds) = case ds of
+  :: DayOfWeek -> T.Day -> DateSpec -> Maybe T.Day
+dayDateSpec dow d (DateSpec ds) = case ds of
   Left ab -> dayAbsolute ab
-  Right rel -> Just $ dayRelative d rel
+  Right rel -> Just $ dayRelative dow d rel
 
 --
 -- Absolute dates
@@ -221,19 +222,93 @@ relDayToInt d = case d of
 dayRelDay :: RelDay -> T.Day -> T.Day
 dayRelDay r = T.addDays (relDayToInt r)
 
+data RelDayOfWeek = RelDayOfWeek Mod DayOfWeek
+  deriving (Eq, Show)
+
+dayRelDayOfWeek :: DayOfWeek -> T.Day -> RelDayOfWeek -> T.Day
+dayRelDayOfWeek weekStart d (RelDayOfWeek m tgt) =
+  let r = findDayInWeek weekStart tgt d
+  in T.addDays (nMod m * 7) r
+
+
+-- | Given a DayOfWeek indicating the start of a week, a DayOfWeek
+-- indicating the day you want, and a Day, returns the Day that is in
+-- the same week as the given Day and that is in the same week as the
+-- given Day.
+findDayInWeek
+
+  :: DayOfWeek
+  -- ^ The week starts on this day
+
+  -> DayOfWeek
+  -- ^ The day that you want to find
+
+  -> T.Day
+  -- ^ Find the day that is in the same week as this day
+
+  -> T.Day
+
+findDayInWeek start t d =
+  let days = listStartingWith (Proxy :: Proxy DayOfWeek) start
+      idxs = zip days [0..]
+      dowToday = let (_, _, dow) = toWeekDate d
+                 in intToDayOfWeek dow
+      getIdx = fromMaybe (error "findDayInWeek: index not found")
+               . flip lookup idxs
+      idxToday = getIdx dowToday 
+      idxTgt = getIdx t
+      nDays = idxTgt - idxToday
+  in T.addDays nDays d
+          
+
+data Proxy a = Proxy
+
+-- | List all items in an enumeration, starting with the given item.
+listStartingWith
+  :: (Enum a, Bounded a, Eq a)
+  => Proxy a
+  -> a
+  -> [a]
+listStartingWith p s = unfoldr f (l, s)
+  where
+    l = enumLength p
+    f (nLeft, idx) =
+      if nLeft <= 0
+      then Nothing
+      else let nextIdx = if idx == maxBound
+                         then minBound
+                         else succ idx
+           in Just (idx, (nLeft - 1, nextIdx))
+
+
+-- | How many items are in an enum?
+--
+-- > enumLength (Proxy :: Proxy Bool) == 2
+enumLength :: (Enum a, Bounded a) => Proxy a -> Int
+enumLength p = length [ min' p .. max' p ]
+  where
+    min' :: Bounded a => Proxy a -> a
+    min' Proxy = minBound
+    max' :: Bounded a => Proxy a -> a
+    max' Proxy = maxBound
+
 data RelByUnit = RelByUnit ModArith Unit
   deriving (Eq, Show)
 
 dayRelByUnit :: T.Day -> RelByUnit -> T.Day
 dayRelByUnit d (RelByUnit m s) = modifyDate (Mod (Right m)) s d
 
-data Relative = Relative (Either RelDay RelByUnit)
+data Relative
+  = RRelDay RelDay
+  | RDayOfWeek RelDayOfWeek
+  | RByUnit RelByUnit
   deriving (Eq, Show)
 
-dayRelative :: T.Day -> Relative -> T.Day
-dayRelative d (Relative e) = case e of
-  Left rd -> dayRelDay rd d
-  Right rr -> dayRelByUnit d rr
+dayRelative :: DayOfWeek -> T.Day -> Relative -> T.Day
+dayRelative dow d r = case r of
+  RRelDay rd -> dayRelDay rd d
+  RByUnit rr -> dayRelByUnit d rr
+  RDayOfWeek rd -> dayRelDayOfWeek dow d rd
 
 --
 -- Ranges
@@ -340,7 +415,7 @@ data ModText
 data Mod = Mod (Either ModText ModArith)
   deriving (Eq, Show)
 
-nMod :: Mod -> Integer
+nMod :: Integral i => Mod -> i
 nMod (Mod m) = case m of
   Left t -> case t of
     This -> 0
@@ -361,7 +436,7 @@ modifyDate m r d =
       Millennium -> T.addGregorianYearsClip (n * 1000) d
       Quarter -> T.addGregorianMonthsClip (n * 3) d
 
-data ModdedUnit = ModdedUnit Mod Unit
+data ModdedUnit = ModdedUnit Mod UnitOrMonth
   deriving (Eq, Show)
 
 moddedUnitToList
@@ -371,24 +446,50 @@ moddedUnitToList
   -- ^ Current day
   -> ModdedUnit
   -> [T.Day]
-moddedUnitToList dow b d (ModdedUnit m r) = unitToList dow b r (modifyDate m r d)
+moddedUnitToList dow b d (ModdedUnit m (UnitOrMonth ei)) =
+  case ei of
+    Left u -> unitToList dow b u (modifyDate m u d)
+    Right mo -> moddedMonthToList d m mo
+
+data UnitOrMonth = UnitOrMonth (Either Unit Month)
+  deriving (Eq, Show)
+
+moddedMonthToList
+  :: T.Day
+  -> Mod
+  -> Month
+  -> [T.Day]
+moddedMonthToList d (Mod md) mo = [ d1 .. d2 ]
+  where
+    monthNum = monthToInt mo
+    (currY, _, _) = T.toGregorian d
+    d1 = T.fromGregorian yr monthNum 1
+    d2 = T.fromGregorian yr monthNum
+                         (T.gregorianMonthLength yr monthNum)
+    yr = case md of
+      Left mt -> case mt of
+        This -> currY
+        Next -> currY + 1
+        Last -> currY - 1
+      Right ma -> currY + (nModArith ma)
 
 data DatedRange = DatedRange DateSpec DateSpec
   deriving (Eq, Show)
 
 datedRangeToList
-  :: T.Day
+  :: DayOfWeek
+  -> T.Day
   -> DatedRange
   -> Ex.Exceptional String [T.Day]
-datedRangeToList b (DatedRange a1 a2) = do
-  d1 <- Ex.fromMaybe "invalid first date given" $ dayDateSpec b a1
-  d2 <- Ex.fromMaybe "invalid second date given" $ dayDateSpec d1 a2
+datedRangeToList dow b (DatedRange a1 a2) = do
+  d1 <- Ex.fromMaybe "invalid first date given" $ dayDateSpec dow b a1
+  d2 <- Ex.fromMaybe "invalid second date given" $ dayDateSpec dow d1 a2
   return $ unfoldr (calcNextDay d2) d1
 
 data Range
   = RUnit ModdedUnit
   | RMonth MonthYear
-  | RYear Year
+  | RYear AbsYear
   | RDated DatedRange
   deriving (Eq, Show)
 
@@ -400,12 +501,33 @@ rangeToList
   -> Ex.Exceptional String [T.Day]
 rangeToList dow b1 d r = case r of
   RUnit u -> return $ moddedUnitToList dow b1 d u
-  RMonth my -> return $ monthYearToList my
-  RYear y -> return $ yearToList y
-  RDated dr -> datedRangeToList d dr
-  either (return . moddedUnitToList dow b1 d) (datedRangeToList d) r
+  RMonth my -> monthYearToList my
+  RYear y -> yearToList y
+  RDated dr -> datedRangeToList dow d dr
 
-data MonthYear = MonthYear 
+data MonthYear = MonthYear Month AbsYear
+  deriving (Eq, Show)
+
+monthYearToList :: MonthYear -> Ex.Exceptional String [T.Day]
+monthYearToList (MonthYear m (AbsYear ds)) =
+  let y = digitsToInt ds
+      mI = monthToInt m
+      err = "Invalid month and year: " ++ show m ++ " " ++ show y
+  in Ex.fromMaybe err $ do
+      d1 <- T.fromGregorianValid y mI 1
+      d2 <- T.fromGregorianValid y mI (T.gregorianMonthLength y mI)
+      return $ [d1 .. d2]
+    
+
+yearToList :: AbsYear -> Ex.Exceptional String [T.Day]
+yearToList (AbsYear ds) =
+  let y = digitsToInt ds
+      err = "Invalid year: " ++ show y
+  in Ex.fromMaybe err $ do
+      d1 <- T.fromGregorianValid y 1 1
+      d2 <- T.fromGregorianValid y 12 31
+      return [d1 .. d2]
+    
 
 --
 -- Parsers
@@ -446,8 +568,28 @@ pEither a b = Left <$> a <|> Right <$> b
 pMod :: Parser Mod
 pMod = Mod <$> pEither pModText pModArith
 
+-- | Parses a Mod if there is one; otherwise returns This.
+pOptionalMod :: Parser Mod
+pOptionalMod
+  = fmap (fromMaybe (Mod (Left This)))
+  . optional
+  . P.try
+  $ pMod
+
 pModdedUnit :: Parser ModdedUnit
-pModdedUnit = ModdedUnit <$> pMod <* spaces <*> pUnit
+pModdedUnit
+  = ModdedUnit
+  <$> pOptionalMod
+  <* spaces
+  <*> pUnitOrMonth
+  <* P.eof
+
+pUnitOrMonth :: Parser UnitOrMonth
+pUnitOrMonth = UnitOrMonth <$> pEither pUnit pMonth
+
+pRelDayOfWeek :: Parser RelDayOfWeek
+pRelDayOfWeek
+  = RelDayOfWeek <$> pOptionalMod <* spaces <*> pDayOfWeek
 
 pRelDay :: Parser RelDay
 pRelDay = parseList "relative day"
@@ -480,6 +622,14 @@ pMonthAbbrev = parseList "month abbreviation"
     ("august", Aug) , ("september", Sep), ("october", Oct),
     ("november", Nov), ("december", Dec) ]
 
+pDayOfWeek :: Parser DayOfWeek
+pDayOfWeek = parseList "day of week"
+  [ ("sunday", Sun), ("monday", Mon), ("tuesday", Tue)
+  , ("wednesday", Wed), ("thursday", Thu)
+  , ("friday", Fri), ("saturday", Sat) ]
+
+
+
 pMonthFromDigits :: Parser Month
 pMonthFromDigits = some pDigit >>= parseDigits
   where
@@ -509,10 +659,22 @@ digitChar d = case d of
   { D0 -> '0'; D1 -> '1'; D2 -> '2'; D3 -> '3'; D4 -> '4';
     D5 -> '5'; D6 -> '6'; D7 -> '7'; D8 -> '8'; D9 -> '9' }
 
+intToDayOfWeek :: Int -> DayOfWeek
+intToDayOfWeek i = case i of
+  { 1 -> Mon; 2 -> Tue; 3 -> Wed; 4 -> Thu; 5 -> Fri;
+    6 -> Sat; 7 -> Sun;
+    _ -> error "intToDayOfWeek: bad int" }
+
 monthToInt :: Month -> Int
 monthToInt m = case m of
   { Jan -> 1; Feb -> 2; Mar -> 3; Apr -> 4; May -> 5; Jun -> 6;
     Jul -> 7; Aug -> 8; Sep -> 9; Oct -> 10; Nov -> 11; Dec -> 12 }
+
+intToMonth :: Int -> Month
+intToMonth i = case i of
+  { 1 -> Jan; 2 -> Feb; 3 -> Mar; 4 -> Apr;  5 -> May;  6 -> Jun;
+    7 -> Jul; 8 -> Aug; 9 -> Sep; 10 -> Oct; 11 -> Nov; 12 -> Dec;
+    _ -> error "intToMonth: bad number" }
 
 pAbsYear :: Parser AbsYear
 pAbsYear = AbsYear <$> some pDigit
@@ -530,7 +692,11 @@ pDayOrLast :: Parser DayOrLast
 pDayOrLast = DayOrLast <$> pEither pDay pLastDay
 
 pRelative :: Parser Relative
-pRelative = Relative <$> pEither pRelDay pRelByUnit
+pRelative
+  = RRelDay <$> P.try pRelDay
+  <|> RDayOfWeek <$> P.try pRelDayOfWeek
+  <|> RByUnit <$> P.try pRelByUnit
+
 
 pRelByUnit :: Parser RelByUnit
 pRelByUnit = RelByUnit <$> pModArith <* spaces <*> pUnit
@@ -548,7 +714,21 @@ pDatedRange
   <*> pDateSpec
 
 pRange :: Parser Range
-pRange = Range <$> pEither pModdedUnit pDatedRange
+pRange
+  = RUnit <$> P.try (pModdedUnit <* P.eof)
+  <|> RMonth <$> P.try (pMonthYear <* P.eof)
+  <|> RYear <$> P.try (pAbsYear <* P.eof)
+  <|> RDated <$> (pDatedRange <* P.eof)
+
+pMonthYear :: Parser MonthYear
+pMonthYear
+  = MonthYear
+  <$> pMonth
+  <* spaces
+  <*> pAbsYear
+  <* spaces
+  <* P.eof
+  <?> "month and year"
 
 --
 --
@@ -693,7 +873,8 @@ allOpts =
     ds <- parsecMultiarg pDateSpec s
     return $ \o -> do
       let baseDay = pCurrent o
-      d <- Ex.fromMaybe ("invalid date: " ++ s) $ dayDateSpec baseDay ds
+          dow = pWeekStart o
+      d <- Ex.fromMaybe ("invalid date: " ++ s) $ dayDateSpec dow baseDay ds
       return o { pCurrent = d }
 
   , MA.OptSpec ["week-start"] "" . MA.OneArgE $ \s ->
@@ -778,8 +959,9 @@ pdctDate = MA.OptSpec ["date"] "d" (MA.TwoArgE f)
       ds <- parsecMultiarg pDateSpec a2
       let g o = do
             let curr = pCurrent o
+                dow = pWeekStart o
             day <- Ex.fromMaybe ("invalid date: " ++ a2)
-                   $ dayDateSpec curr ds
+                   $ dayDateSpec dow curr ds
             let cmp i = compare (iDay i) day
                 tok = Exp.operand
                       $ cmpFn (X.pack . show $ day) "date" cmp
@@ -874,12 +1056,6 @@ pdctMonth = MA.OptSpec ["month"] "m" (MA.TwoArgE f)
                     in intToMonth m
           tok = Exp.operand $ cmpFn itemDesc typeDesc cmp
       return $ fmap return (addOperand tok)
-
-intToMonth :: Int -> Month
-intToMonth i = case i of
-  { 1 -> Jan; 2 -> Feb; 3 -> Mar; 4 -> Apr;  5 -> May;  6 -> Jun;
-    7 -> Jul; 8 -> Aug; 9 -> Sep; 10 -> Oct; 11 -> Nov; 12 -> Dec;
-    _ -> error "intToMonth: bad number" }
 
 pdctEnds :: MA.OptSpec (ParseOpts -> Ex.Exceptional String ParseOpts)
 pdctEnds = MA.OptSpec ["ends"] "" (MA.NoArg (fmap return f))

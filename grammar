@@ -5,9 +5,9 @@ dapi. Terminals are double quoted. All terminals are case insensitive.
 The range is a key start symbol in dapi. Each of the non-option
 arguments is a range.
 
-range ::= moddedUnit | monthYear | year | datedRange
+range ::= moddedUnit | monthYear | absYear | datedRange
 
-monthYear ::= monthAbbrev year
+monthYear ::= monthAbbrev absYear
 
 datedRange ::= dateSpec rangeSep dateSpec
 
@@ -36,9 +36,9 @@ sign ::= "+" | "-"
 
 dateSpec ::= absolute | relative
 
-absolute ::= year sep month sep dayOrLast
+absolute ::= absYear sep month sep dayOrLast
 
-year ::= digits
+absYear ::= digits
 
 sep ::= "/" | "-"
 
@@ -61,7 +61,7 @@ last ::= "l"
 
 * Relative
 
-relative ::= relDay | relByUnit
+relative ::= relDay | relDayOfWeek | relByUnit
 
 For relDayOfWeek, no mod is the same as "this". "this" picks the day
 that is in the current week, whether in the past or future. "next"
@@ -70,7 +70,7 @@ excluding today. -1 is the previous occurring day, excluding today.
 
 relDayOfWeek ::= mod? dayOfWeek
 
-relDay ::= "today" | "yesterday" | "tomorrow" | relDayOfWeek
+relDay ::= "today" | "yesterday" | "tomorrow"
 
 relByUnit ::= modArith unit
 
