@@ -385,7 +385,11 @@ datedRangeToList b (DatedRange a1 a2) = do
   d2 <- Ex.fromMaybe "invalid second date given" $ dayDateSpec d1 a2
   return $ unfoldr (calcNextDay d2) d1
 
-data Range = Range (Either ModdedUnit DatedRange)
+data Range
+  = RUnit ModdedUnit
+  | RMonth MonthYear
+  | RYear Year
+  | RDated DatedRange
   deriving (Eq, Show)
 
 rangeToList
@@ -394,8 +398,14 @@ rangeToList
   -> T.Day
   -> Range
   -> Ex.Exceptional String [T.Day]
-rangeToList dow b1 d (Range r) =
+rangeToList dow b1 d r = case r of
+  RUnit u -> return $ moddedUnitToList dow b1 d u
+  RMonth my -> return $ monthYearToList my
+  RYear y -> return $ yearToList y
+  RDated dr -> datedRangeToList d dr
   either (return . moddedUnitToList dow b1 d) (datedRangeToList d) r
+
+data MonthYear = MonthYear 
 
 --
 -- Parsers

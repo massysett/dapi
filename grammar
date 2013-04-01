@@ -2,16 +2,25 @@ Here is a grammar for various productions used throughout
 dapi. Terminals are double quoted. All terminals are case insensitive.
 
 
-range ::= moddedUnit | datedRange
+The range is a key start symbol in dapi. Each of the non-option
+arguments is a range.
+
+range ::= moddedUnit | monthYear | year | datedRange
+
+monthYear ::= monthAbbrev year
 
 datedRange ::= dateSpec rangeSep dateSpec
 
 rangeSep ::= "-"
 
-moddedUnit ::= mod unit
+For moddedUnit, no mod is the same as "this".
 
-unit ::= "days" | "weeks" | "months" | "years" | "decades" | "century" |
-"millennium" | "quarters"
+moddedUnit ::= mod? unitOrMonth
+
+unitOrMonth ::= unit | monthAbbrev
+
+unit ::= "day" | "week" | "month" | "year" | "decade" | "century" |
+"millennium" | "quarter"
 
 mod ::= modText | modArith
 
@@ -54,14 +63,19 @@ last ::= "l"
 
 relative ::= relDay | relByUnit
 
-relDay ::= "today" | "yesterday" | "tomorrow"
+For relDayOfWeek, no mod is the same as "this". "this" picks the day
+that is in the current week, whether in the past or future. "next"
+from next week, "last" from last week. +1 is the next occurring day,
+excluding today. -1 is the previous occurring day, excluding today.
+
+relDayOfWeek ::= mod? dayOfWeek
+
+relDay ::= "today" | "yesterday" | "tomorrow" | relDayOfWeek
 
 relByUnit ::= modArith unit
 
 * Day of week
 
-dayOfWeek ::= dowLetter | dowName
-
-dowLetter ::= "M" | "T" | "W" | "R" | "F" | "A" | "U"
+dayOfWeek ::= dowName
 
 dowName ::= "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat"
