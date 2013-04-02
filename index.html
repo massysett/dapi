@@ -1,0 +1,64 @@
+<html>
+
+<head>
+<title>dapi - print a series of dates</title>
+</head>
+
+<h1>dapi - print a series of dates</h1>
+
+<p>This is a little program that prints a series of dates to standard
+  output. The name is short for "date picker". You also get a
+  sophisticated filtering mechanism to remove dates you do not want to
+  see.</p>
+
+<p>Examples:</p>
+<ul>
+  <li>dapi 'this month'</li>
+  <li>dapi 'next year'</li>
+  <li>dapi '+2 week'</li>
+</ul>
+
+<p>To show each day next month that is a Tuesday:</p>
+
+<p><i>dapi --weekday '==' tue 'next month'</i></p>
+
+<p>Plenty of examples are in the manpage.</p>
+
+<h2>Documentation</h2>
+
+<ul>
+  <li><a href="dapi.1.html">Man page</a> - unfortunately the program
+  that changes the roff markup to HTML strips out some of the
+  tables. For best results read this on your computer using a real man
+  page reader. But this link will get you started and tell you
+  whether dapi is something you are interested in.</li>
+
+  <li><a href="grammar.txt">Grammar</a> - fully describes the
+  different ways you can describe a range of dates.</li>
+</ul>
+
+<h2>Links</h2>
+<p><a href="https://github.com/massysett/dapi">Github page</a> - full
+  source available here.</p>
+
+<p><a href="license.txt">License</a> - there is NO WARRANTY of any
+kind</a></p>
+
+<p><a href="http://hackage.haskell.org/package/dapi">Haskell Hackage
+page</a></p>
+
+<h2>Installation</h2>
+
+<p> Get the <a href="http://www.haskell.org/ghc">Glasgow Haskell
+    Compiler</a>
+    and <a href="http://hackage.haskell.org/trac/hackage/wiki/CabalInstall">cabal
+    install</a> working (too much to explain here, sorry) and then run
+    "cabal install dapi".</p>
+
+<p>Or, if you know Haskell, you know the other ways you can do this.</p>
+
+<h2>Contact me</h2>
+
+<p>Please report any bugs, ideas, appreciation, or flames
+  to <a href="mailto:omari@smileystation.com">omari@smileystation.com</a>
+  or use Github.</p>

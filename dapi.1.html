@@ -1,0 +1,448 @@
+<!-- Creator     : groff version 1.22.2 -->
+<!-- CreationDate: Tue Apr  2 17:19:38 2013 -->
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta name="generator" content="groff -Thtml, see www.gnu.org">
+<meta http-equiv="Content-Type" content="text/html; charset=US-ASCII">
+<meta name="Content-Style" content="text/css">
+<style type="text/css">
+       p       { margin-top: 0; margin-bottom: 0; vertical-align: top }
+       pre     { margin-top: 0; margin-bottom: 0; vertical-align: top }
+       table   { margin-top: 0; margin-bottom: 0; vertical-align: top }
+       h1      { text-align: center }
+</style>
+<title>dapi</title>
+
+</head>
+<body>
+
+<h1 align="center">dapi</h1>
+
+<a href="#NAME">NAME</a><br>
+<a href="#SYNOPSIS">SYNOPSIS</a><br>
+<a href="#DESCRIPTION">DESCRIPTION</a><br>
+<a href="#OPTIONS">OPTIONS</a><br>
+<a href="#SEE ALSO">SEE ALSO</a><br>
+<a href="#CONTACT INFORMATION">CONTACT INFORMATION</a><br>
+
+<hr>
+
+
+<h2>NAME
+<a name="NAME"></a>
+</h2>
+
+
+<p style="margin-left:11%; margin-top: 1em">dapi - print a
+series of dates</p>
+
+<h2>SYNOPSIS
+<a name="SYNOPSIS"></a>
+</h2>
+
+
+<p style="margin-left:11%; margin-top: 1em"><b>dapi</b>
+[options] DATE_RANGE...</p>
+
+<h2>DESCRIPTION
+<a name="DESCRIPTION"></a>
+</h2>
+
+
+<p style="margin-left:11%; margin-top: 1em"><b>Ranges <br>
+dapi</b> prints a series of dates on standard output. You
+specify one or more ranges of dates. Examples:</p>
+
+<pre style="margin-left:11%; margin-top: 1em">dapi &rsquo;this month&rsquo;dapi &rsquo;next month&rsquo;dapi &rsquo;jan&rsquo;dapi &rsquo;this week&rsquo;dapi &rsquo;+1 week&rsquo;</pre>
+
+
+<p style="margin-left:11%; margin-top: 1em">Often ranges
+include multiple words, so you have to quote them so that
+your shell presents them to dapi as a single command line
+argument. Also, you might specify a range that leads with a
+minus sign. Before doing that, use a double dash to indicate
+that you are not entering options anymore, otherwise
+<b>dapi</b> will get confused and think you are entering an
+option:</p>
+
+<pre style="margin-left:11%; margin-top: 1em">dapi -- &rsquo;-2 year&rsquo;</pre>
+
+
+<p style="margin-left:11%; margin-top: 1em">You can specify
+exact dates for your range:</p>
+
+<pre style="margin-left:11%; margin-top: 1em">dapi &rsquo;2013-03-01 - 2013-04-01&rsquo;</pre>
+
+
+<p style="margin-left:11%; margin-top: 1em">This is a
+single range, so you must quote it as it is a single
+command-line argument. The second date in the range is the
+date that is <i>one day past</i> the last day you want
+included in the range. Therefore, the above example prints
+every day in March 2013; it does <i>not</i> include April
+1.</p>
+
+<p style="margin-left:11%; margin-top: 1em">Ranges can also
+be backward:</p>
+
+<pre style="margin-left:11%; margin-top: 1em">dapi &rsquo;2013-03-31 - 2013-02-28&rsquo;</pre>
+
+
+<p style="margin-left:11%; margin-top: 1em">prints every
+day in March 2013, but in reverse order. In situations like
+that it can be handy to specify that you want to use the
+last day of the month. Use the letter &quot;l&quot; for
+this. The next example prints the same dates as the one
+above:</p>
+
+<pre style="margin-left:11%; margin-top: 1em">dapi &rsquo;2013-03-l - 2013-02-l&rsquo;</pre>
+
+
+<p style="margin-left:11%; margin-top: 1em">You can specify
+more than one range and all the dates will be printed. This
+prints every day in 2013 and 2014:</p>
+
+<pre style="margin-left:11%; margin-top: 1em">dapi 2013 2014</pre>
+
+
+<p style="margin-left:11%; margin-top: 1em"><b>Filters</b>
+<br>
+If you don&rsquo;t want to see all the dates in the ranges
+that you specified, you can filter the days. You specify a
+predicate--that is, a function that will be applied to each
+date in the ranges. The date is included in the result only
+if the predicate returns True. For instance, the
+<b>--day</b> option specifies a predicate which examines the
+day of the month. This prints the first day of each month in
+2013:</p>
+
+<pre style="margin-left:11%; margin-top: 1em">dapi --day &rsquo;==&rsquo; 1 2013</pre>
+
+
+<p style="margin-left:11%; margin-top: 1em">Prints the
+first and second day of each month in 2013:</p>
+
+<pre style="margin-left:11%; margin-top: 1em">dapi --day &rsquo;&lt;=&rsquo; 2 2013</pre>
+
+
+<p style="margin-left:11%; margin-top: 1em">As with range
+specifiers, you can use the letter &quot;l&quot; with the
+<b>--day</b> option to specify the last day of the month.
+Prints the last day of each month in 2013:</p>
+
+<pre style="margin-left:11%; margin-top: 1em">dapi --day &rsquo;==&rsquo; l 2013</pre>
+
+
+<p style="margin-left:11%; margin-top: 1em">Another
+predicate option is <b>--weekday</b>, which specifies a day
+of the week. Prints every Thursday in this month:</p>
+
+<pre style="margin-left:11%; margin-top: 1em">dapi --weekday &rsquo;==&rsquo; thu &rsquo;this month&rsquo;</pre>
+
+
+<p style="margin-left:11%; margin-top: 1em">If you have
+more than one predicate option, you must join them together
+using operators. The operator options are <b>--and</b>,
+<b>--or</b>, and <b>--not</b>. By default, <b>dapi</b> uses
+reverse polish notation, which (imprecisely) means that
+operators are specified after the predicates they affect.
+For example, this prints every date in 2013 that is both a
+Sunday and is in the first 15 days of the month:</p>
+
+<pre style="margin-left:11%; margin-top: 1em">dapi --weekday &rsquo;==&rsquo; sun --day &rsquo;&lt;=&rsquo; 15 --and 2013</pre>
+
+
+<h2>OPTIONS
+<a name="OPTIONS"></a>
+</h2>
+
+
+<p style="margin-left:11%; margin-top: 1em">The order of
+the <b>dapi</b> command line is significant. Most options
+only affect other options that are later on the command
+line. This is similar, for better or for worse, to
+<b>find</b>(1).</p>
+
+<p style="margin-left:11%; margin-top: 1em"><b>Options to
+build predicates</b> <br>
+Many of these options take a <i>comparer</i>. Here are the
+valid comparers. You may need to quote many of them,
+otherwise your shell will interpret them to mean something
+else (redirection, for example.)</p>
+
+
+<p align="center" style="margin-top: 1em"><img src="grohtml-54381.png" alt="Image grohtml-54381.png"></p>
+
+<p style="margin-left:11%;"><b>--date, -t</b> <i>COMPARER
+DATE_SPEC</i></p>
+
+<p style="margin-left:22%;">Date falls within the specified
+range. <i>DATE_SPEC</i> may be in YYYY-MM-DD format, or it
+can be a relative date, like <i>tue</i>.</p>
+
+<p style="margin-left:11%;"><b>--weekday, -w</b>
+<i>COMPARER DAY_OF_WEEK</i></p>
+
+<p style="margin-left:22%;">Day of week falls in the
+specified range. The order of days is affected by the
+<b>--week-start</b> option. <i>DAY_OF_WEEK</i> is a
+three-letter lowercase abbreviation for the day of the
+week.</p>
+
+<p style="margin-left:11%;"><b>--day, -d</b> <i>COMPARER
+DAY_OR_LAST</i></p>
+
+<p style="margin-left:22%;">The day number falls in the
+given range. <i>DAY_OR_LAST</i> either is digits specifying
+the day, or the letter &quot;l&quot; meaning the last day of
+the month.</p>
+
+<p style="margin-left:11%;"><b>--year, -y</b> <i>COMPARER
+YEAR</i></p>
+
+<p style="margin-left:22%;">The year number falls in the
+given range. <i>YEAR</i> is digits.</p>
+
+<p style="margin-left:11%;"><b>--month, -m</b> <i>COMPARER
+MONTH</i></p>
+
+<p style="margin-left:22%;">The month falls in the given
+range. Currently the ordering is set so that January is
+always the first month. <i>MONTH</i> is a three-letter
+abbreviation for a month.</p>
+
+<p style="margin-left:11%;"><b>--ends, -e</b></p>
+
+<p style="margin-left:22%;">The first or the last day in
+the entire list of dates. For example</p>
+
+<pre style="margin-left:22%; margin-top: 1em">dapi --ends &rsquo;this year&rsquo;</pre>
+
+
+<p style="margin-left:22%; margin-top: 1em">shows the first
+and last days of the year.</p>
+
+<p style="margin-left:11%;"><b>--first, -f</b></p>
+
+<p style="margin-left:22%;">The first day in the list of
+dates.</p>
+
+<p style="margin-left:11%;"><b>--last, -l</b></p>
+
+<p style="margin-left:22%;">The last day in the list of
+dates.</p>
+
+<p style="margin-left:11%;"><b>--count, -c</b>
+<i>DIGITS</i></p>
+
+<p style="margin-left:22%;">Selects every <i>nth</i> day.
+For example, to see your paydays if you get paid every 2
+weeks staring on January 10, 2013:</p>
+
+<pre style="margin-left:22%; margin-top: 1em">dapi --count 14 &rsquo;2013-01-10 - 2014-01-01&rsquo;</pre>
+
+
+<p style="margin-left:11%;"><b>--and, -a, --or, -o, --not,
+-n</b></p>
+
+<p style="margin-left:22%;">The operators. By default
+<b>dapi</b> uses reverse polish notation; for infix
+notation, use the <b>--infix</b> option. <b>--and</b> and
+<b>--or</b> are binary; <b>--not</b> is unary. For instance,
+to show the first day of every month this year that is not
+in June or July:</p>
+
+<pre style="margin-left:22%; margin-top: 1em">dapi --day &rsquo;==&rsquo; 1 --month &rsquo;==&rsquo; jun --month &rsquo;==&rsquo; jul \
+     --or --not --and &rsquo;this year&rsquo;</pre>
+
+
+<p style="margin-left:22%; margin-top: 1em">Another way to
+do this:</p>
+
+<pre style="margin-left:22%; margin-top: 1em">dapi --day &rsquo;==&rsquo; 1 --month &rsquo;/=&rsquo; jun --month &rsquo;/=&rsquo; jul \
+     --and --and &rsquo;this year&rsquo;</pre>
+
+
+<p style="margin-left:11%;"><b>--open, -(, --close,
+-)</b></p>
+
+<p style="margin-left:22%;">Open and close parentheses. You
+can only use these when using the <b><br>
+--infix</b> <br>
+option, as reverse polish notation expressions cannot use
+parentheses.</p>
+
+<p style="margin-left:11%; margin-top: 1em"><b>Options
+affecting dates <br>
+--current</b> <i>DATE_SPEC</i>, <b>-C</b>
+<i>DATE_SPEC</i></p>
+
+<p style="margin-left:22%;">Sets the current date. When you
+specify a date or a range that is relative to a day, such as
+in the command <b>dapi &rsquo;this month&rsquo;</b>,
+<b>dapi</b> needs to start with a date to figure out when
+&quot;this month&quot; is. By default, <b>dapi</b> uses
+today. To specify a different date, use this option.</p>
+
+<p style="margin-left:11%;"><b>--week-start, -W</b>
+<i>DAY_OF_WEEK</i></p>
+
+<p style="margin-left:22%;">The first day of the week is
+the specified day.</p>
+
+<p style="margin-left:11%;"><b>--format</b> <i>FORMAT</i>,
+<b>-f</b> <i>FORMAT</i></p>
+
+<p style="margin-left:22%;">Formats dates. This uses the
+same formatting strings that <b>strftime</b>(3) uses, so
+look at that man page for your choices here. A newline is
+appended to the end of each date automatically.</p>
+
+<p style="margin-left:11%;"><b>--base1</b></p>
+
+<p style="margin-left:22%;">By default, centuries, decades,
+and millennia begin in years that are evenly divisible by
+10. However, since the first year was year 1 rather than
+year 0, the first century was years 1-100, not 0-99. This
+option makes <b>dapi</b> conform to this. The converse is
+<b>--base0</b>, which is the default. For example, compare
+the output of</p>
+
+<pre style="margin-left:22%; margin-top: 1em">dapi --base1 --day &rsquo;==&rsquo; 1 --month &rsquo;==&rsquo; jan --and &rsquo;this century&rsquo;</pre>
+
+
+<p style="margin-left:22%; margin-top: 1em">with</p>
+
+<pre style="margin-left:22%; margin-top: 1em">dapi --base0 --day &rsquo;==&rsquo; 1 --month &rsquo;==&rsquo; jan --and &rsquo;this century&rsquo;</pre>
+
+
+<p style="margin-left:11%; margin-top: 1em"><b>Options
+affecting expressions <br>
+--infix, -I</b></p>
+
+<p style="margin-left:22%;">Use infix operators. By default
+<b>dapi</b> uses reverse polish notation operators.</p>
+
+<p style="margin-left:11%;"><b>--rpn, -R</b></p>
+
+<p style="margin-left:22%;">Use reverse polish notation
+operators</p>
+
+<p style="margin-left:11%;"><b>--show-expression,
+-S</b></p>
+
+<p style="margin-left:22%;">Show the expression used to
+filter dates. Useful if you enter a complex expression and
+you want to make sure it is doing what you think it is.</p>
+
+<p style="margin-left:11%;"><b>--verbose-filter, -V</b></p>
+
+<p style="margin-left:22%;">Be verbose when filtering the
+days. This shows you which days are included in the final
+list of days, which days are rejected, and why. By default
+this is colorful, unless your terminal does not support
+colors or unless standard output is not a terminal. To
+suppress colors all the time, preface your <b>dapi</b>
+command with <i>TERM=dumb</i>.</p>
+
+<p style="margin-left:11%;"><b>--color-to-file, -T</b></p>
+
+<p style="margin-left:22%;">Use colors even when standard
+output is not a terminal. Affects only the
+<b>--verbose-filter</b> option.</p>
+
+<h2>SEE ALSO
+<a name="SEE ALSO"></a>
+</h2>
+
+
+<table width="100%" border="0" rules="none" frame="void"
+       cellspacing="0" cellpadding="0">
+<tr valign="top" align="left">
+<td width="11%"></td>
+<td width="1%">
+
+
+<p style="margin-top: 1em">&bull;</p></td>
+<td width="10%"></td>
+<td width="78%">
+
+
+<p style="margin-top: 1em"><b>strftime</b>(3),
+<b>cal</b>(1), <b>date</b>(1)</p></td></tr>
+<tr valign="top" align="left">
+<td width="11%"></td>
+<td width="1%">
+
+
+<p>&bull;</p></td>
+<td width="10%"></td>
+<td width="78%">
+
+
+<p>The <i>grammar</i> file in the <i>dapi</i> tarball
+explains the grammar that you can use for date ranges. Some
+examples are given above, but all the options are explained
+in the grammar.</p></td></tr>
+</table>
+
+<h2>CONTACT INFORMATION
+<a name="CONTACT INFORMATION"></a>
+</h2>
+
+
+<p style="margin-left:11%; margin-top: 1em">Brought to you
+by Omari Norman.</p>
+
+<table width="100%" border="0" rules="none" frame="void"
+       cellspacing="0" cellpadding="0">
+<tr valign="top" align="left">
+<td width="11%"></td>
+<td width="1%">
+
+
+<p style="margin-top: 1em">&bull;</p></td>
+<td width="10%"></td>
+<td width="60%">
+
+
+
+<p style="margin-top: 1em">http://massysett.github.com/dapi</p> </td>
+<td width="18%">
+</td></tr>
+<tr valign="top" align="left">
+<td width="11%"></td>
+<td width="1%">
+
+
+<p>&bull;</p></td>
+<td width="10%"></td>
+<td width="60%">
+
+
+<p>http://hackage.haskell.org/package/dapi</p></td>
+<td width="18%">
+</td></tr>
+<tr valign="top" align="left">
+<td width="11%"></td>
+<td width="1%">
+
+
+<p>&bull;</p></td>
+<td width="10%"></td>
+<td width="60%">
+
+
+<p>http://github.com/massysett/dapi</p></td>
+<td width="18%">
+</td></tr>
+</table>
+
+<p style="margin-left:11%; margin-top: 1em">Please report
+any bugs through Github or to omari@smileystation.com. This
+program comes AS-IS without any warranty of any kind.</p>
+<hr>
+</body>
+</html>
