@@ -1,7 +1,7 @@
 .TH dapi 1
 .
 .SH NAME
-dapi \- print a series of dates
+dapi - print a series of dates
 .
 .SH SYNOPSIS
 .B dapi
@@ -37,7 +37,17 @@ dapi '+1 week'
 .
 .P
 Often ranges include multiple words, so you have to quote them so that
-your shell presents them to dapi as a single command line argument.
+your shell presents them to dapi as a single command line
+argument. Also, you might specify a range that leads with a minus
+sign. Before doing that, use a double dash to indicate that you are
+not entering options anymore, otherwise
+.B dapi
+will get confused and think you are entering an option:
+
+.EX
+dapi -- '-2 year'
+.EE
+
 .
 .P
 You can specify exact dates for your range:
@@ -88,7 +98,7 @@ specified, you can filter the days. You specify a predicate--that is,
 a function that will be applied to each date in the ranges. The date
 is included in the result only if the predicate returns True. For
 instance, the
-.B \-\-day
+.B --day
 option specifies a predicate which examines the day of the month. This
 prints the first day of each month in 2013:
 .P
@@ -103,7 +113,7 @@ dapi --day '<=' 2 2013
 .EE
 .P
 As with range specifiers, you can use the letter "l" with the
-.B \-\-day
+.B --day
 option to specify the last day of the month. Prints the last day of
 each month in 2013:
 .P
@@ -112,18 +122,19 @@ dapi --day '==' l 2013
 .EE
 .P
 Another predicate option is
-.BR \-\-weekday ,
+.BR --weekday ,
 which specifies a day of the week. Prints every Thursday in this month:
 .P
 .EX
 dapi --weekday '==' thu 'this month'
 .EE
 .P
-If you have more than one predicate option, you must join them together using operators. The operator options are
-.BR \-\-and ,
-.BR \-\-or ,
+If you have more than one predicate option, you must join them
+together using operators. The operator options are
+.BR --and ,
+.BR --or ,
 and
-.BR \-\-not .
+.BR --not .
 By default,
 .B dapi
 uses reverse polish notation, which (imprecisely) means that operators
@@ -132,7 +143,7 @@ prints every date in 2013 that is both a Sunday and is in the first 15
 days of the month:
 .P
 .EX
-dapi \-\-weekday '==' sun \-\-day '<=' 15 \-\-and 2013
+dapi --weekday '==' sun --day '<=' 15 --and 2013
 .EE
 .
 .SH OPTIONS
@@ -144,11 +155,124 @@ that are later on the command line. This is similar, for better or for
 worse, to
 .BR find (1).
 .
+.SS Options to build predicates
+.P
+Many of these options take a
+.IR comparer .
+Here are the valid comparers. You may need to quote many of them,
+otherwise your shell will interpret them to mean something else
+(redirection, for example.)
+.
+.TS
+tab(:);
+l l.
+==:Equals (you may also use \fB=\fR)
+>:Greater than
+<:Less than
+>=:Greater than or equal to
+<=:Less than or equal to
+/=:Not equal to (you may also use \fB!=\fR)
+.TE
+.P
+.TP
+.BI "--date, -t " "COMPARER DATE_SPEC"
+Date falls within the specified range.
+.I DATE_SPEC
+may be in YYYY-MM-DD format, or it can be a relative date, like
+.IR tue .
+.
+.TP
+.BI "--weekday, -w " "COMPARER DAY_OF_WEEK"
+Day of week falls in the specified range. The order of days is affected by the
+.B --week-start
+option.
+.I DAY_OF_WEEK
+is a three-letter lowercase abbreviation for the day of the week.
+.
+.TP
+.BI "--day, -d " "COMPARER DAY_OR_LAST"
+The day number falls in the given range.
+.I DAY_OR_LAST
+either is digits specifying the day, or the letter "l" meaning the
+last day of the month.
+.
+.TP
+.BI "--year, -y " "COMPARER YEAR"
+The year number falls in the given range.
+.I YEAR
+is digits.
+.
+.TP
+.BI "--month, -m " "COMPARER MONTH"
+The month falls in the given range. Currently the ordering is set so
+that January is always the first month.
+.I MONTH
+is a three-letter abbreviation for a month.
+.
+.TP
+.B --ends, -e
+The first or the last day in the entire list of dates. For example
+
+.EX
+dapi --ends 'this year'
+.EE
+
+shows the first and last days of the year.
+.
+.TP
+.B --first, -f
+The first day in the list of dates.
+.TP
+.B --last, -l
+The last day in the list of dates.
+.
+.TP
+.BI "--count, -c " "DIGITS"
+Selects every
+.I nth
+day. For example, to see your paydays if you get paid every 2 weeks
+staring on January 10, 2013:
+
+.EX
+dapi --count 14 '2013-01-10 - 2014-01-01'
+.EE
+
+.TP
+.B --and, -a, --or, -o, --not, -n
+The operators. By default
+.B dapi
+uses reverse polish notation; for infix notation, use the
+.B --infix
+option.
+.B --and
+and
+.B --or
+are binary;
+.B --not
+is unary. For instance, to show the first day of every month this year
+that is not in June or July:
+.
+
+.EX
+dapi --day '==' 1 --month '==' jun --month '==' jul \\
+     --or --not --and 'this year'
+.EE
+
+Another way to do this:
+
+.EX
+dapi --day '==' 1 --month '/=' jun --month '/=' jul \\
+     --and --and 'this year'
+.
+.TP
+.B --open, -(, --close, -)
+Open and close parentheses. You can only use these when using the
+.B --infix
+option, as reverse polish notation expressions cannot use parentheses.
+.
 .SS Options affecting dates
 .TP
-.BI \-\-current " DATE_SPEC"
-.TQ
-.BI \-C " DATE_SPEC"
+\fB--current\fR \fIDATE_SPEC\fR, \fB-C\fR \fIDATE_SPEC\fR
 Sets the current date. When you specify a date or a range that is
 relative to a day, such as in the command
 .BR "dapi 'this month'" ,
@@ -158,9 +282,92 @@ needs to start with a date to figure out when "this month" is. By default,
 uses today. To specify a different date, use this option.
 .
 .TP
-.BI \-\-format " FORMAT_STRING"
-.TQ
-.BI \-f " FORMAT_STRING"
+.BI "--week-start, -W " DAY_OF_WEEK
+The first day of the week is the specified day.
+.
+.TP
+\fB--format\fR \fIFORMAT\fR, \fB-f\fR \fIFORMAT\fI
 Formats dates. This uses the same formatting strings that
 .BR strftime (3)
-uses, so look at that man page for your choices here.
+uses, so look at that man page for your choices here. A newline is
+appended to the end of each date automatically.
+.
+.TP
+.B --base1
+By default, centuries, decades, and millennia begin in years that are
+evenly divisible by 10. However, since the first year was year 1
+rather than year 0, the first century was years 1-100, not 0-99. This
+option makes
+.B dapi
+conform to this.
+The converse is
+.BR --base0 ,
+which is the default.
+For example, compare the output of
+
+.EX
+dapi --base1 --day '==' 1 --month '==' jan --and 'this century'
+.EE
+
+with
+
+.EX
+dapi --base0 --day '==' 1 --month '==' jan --and 'this century'
+.EE
+.
+.SS Options affecting expressions
+.
+.TP
+.B --infix, -I
+Use infix operators. By default
+.B dapi
+uses reverse polish notation operators.
+.
+.TP
+.B --rpn, -R
+Use reverse polish notation operators
+.
+.TP
+.B --show-expression, -S
+Show the expression used to filter dates. Useful if you enter a
+complex expression and you want to make sure it is doing what you
+think it is.
+.
+.TP
+.B --verbose-filter, -V
+Be verbose when filtering the days. This shows you which days are
+included in the final list of days, which days are rejected, and
+why. By default this is colorful, unless your terminal does not
+support colors or unless standard output is not a terminal. To
+suppress colors all the time, preface your
+.B dapi
+command with
+.IR TERM=dumb .
+.
+.TP
+.B --color-to-file, -T
+Use colors even when standard output is not a terminal. Affects only the
+.B --verbose-filter
+option.
+.
+.SH SEE ALSO
+.IP \(bu
+.BR strftime "(3), " cal "(1), " date "(1)"
+.IP \(bu
+The \fIgrammar\fR file in the \fIdapi\fR tarball explains the grammar
+that you can use for date ranges. Some examples are given above, but
+all the options are explained in the grammar.
+.
+.SH CONTACT INFORMATION
+.P
+Brought to you by Omari Norman.
+.IP \(bu
+http://massysett.github.com/dapi
+.IP \(bu
+http://hackage.haskell.org/package/dapi
+.IP \(bu
+http://github.com/massysett/dapi
+.P
+Please report any bugs through Github or to
+omari@smileystation.com. This program comes AS-IS without any warranty
+of any kind.

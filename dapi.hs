@@ -14,8 +14,8 @@ import Data.Functor.Identity (Identity)
 import Data.Char (toLower)
 import Data.Either (partitionEithers)
 import Data.List (foldl', unfoldr)
-import Data.Maybe (fromMaybe, catMaybes)
-import Data.Monoid ((<>))
+import Data.Maybe (fromMaybe)
+import Data.Monoid (mconcat)
 import qualified Data.Text as X
 import Data.Text (Text)
 import qualified Data.Prednote.Expressions as Exp
@@ -49,6 +49,20 @@ myOpts = Opts
   }
 
 
+-- | How much to indent each level when verbosely evaluating which
+-- days to include.
+indentAmt :: Int
+indentAmt = 2
+
+-- | What indentation level to start at when verbosely evaluating
+-- which days to include.
+startLvl :: Int
+startLvl = 0
+
+------------------------------------------------------------
+-- END Configurable Options
+------------------------------------------------------------
+
 help :: String -> String
 help pn = unlines
   [ "usage: " ++ pn ++ " [options] RANGE..."
@@ -61,9 +75,9 @@ help pn = unlines
   , "  The first day of the week is the specified day"
   , "--format, -F FORMAT_SRING"
   , "  Formats dates, see strftime(3)"
-  , "--base0, -0"
+  , "--base0"
   , "  Centuries, decades, and millennia begin with years that end in 0"
-  , "--base1, -1"
+  , "--base1"
   , "  Centuries, decades, and millennia begin with years that end in 1"
   , ""
   , "--infix, -I - use infix operators"
@@ -803,6 +817,16 @@ data DayInfo = DayInfo
   , iBack :: Int
   }
 
+showDayInfo :: DayInfo -> Text
+showDayInfo i
+  = mconcat ["iFwd: ", fwd, " iBack: ", bak, " date: ", dt]
+  where
+    fwd = X.pack . show . iFwd $ i
+    bak = X.pack . show . iBack $ i
+    dt = X.pack
+         . T.formatTime defaultTimeLocale "%a %Y-%m-%d"
+         . iDay $ i
+
 data Opts = Opts
   { oWeekStart :: DayOfWeek
   , oBase :: BaseOne
@@ -871,8 +895,8 @@ allOpts =
   , MA.OptSpec ["format"] "F" . MA.OneArg $ \s o ->
     return o { pFormat = s }
 
-  , MA.OptSpec ["base0"] "0" (MA.NoArg (\o -> return o { pBase = False }))
-  , MA.OptSpec ["base1"] "1" (MA.NoArg (\o -> return o { pBase = True }))
+  , MA.OptSpec ["base0"] "" (MA.NoArg (\o -> return o { pBase = False }))
+  , MA.OptSpec ["base1"] "" (MA.NoArg (\o -> return o { pBase = True }))
 
   , MA.OptSpec ["infix"] "I"
     (MA.NoArg (\o -> return o { pExprDesc = Exp.Infix }))
@@ -1101,18 +1125,15 @@ main = do
     putStr $ "Filter expression:\n\n"
     printer $ Pd.showPdct 2 0 pdct
     putStr "\n"
-  let doEval x =
-        let renamer txt = (X.pack . show . iDay $ x) <> " - " <> txt
-            pdct' = Pd.rename renamer pdct
-        in Pd.evaluate 2 True x 0 pdct'
-      pairs = map doEval infos
+  let (remainingDayInfos, chunks)
+        = Pd.filter indentAmt False startLvl
+          showDayInfo pdct infos
   when (pVerboseFilter po) $ do
     putStr $ "Verbose evaluation:\n\n"
-    printer . concatMap snd $ pairs
+    printer chunks
     putStr "\n"
-  let remover (info, mayBool) =
-        if mayBool == Just True
-        then Just (iDay info)
-        else Nothing
-      days = catMaybes . map remover $ zip infos (map fst pairs)
-  mapM_ putStrLn (map (T.formatTime defaultTimeLocale (pFormat po)) days)
+  mapM_ putStrLn
+    . map (T.formatTime defaultTimeLocale (pFormat po))
+    . map iDay
+    $ remainingDayInfos
+

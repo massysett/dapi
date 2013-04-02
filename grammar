@@ -1,81 +1,153 @@
-Here is a grammar for various productions used throughout
-dapi. Terminals are double quoted. All terminals are case insensitive.
+Here is a grammar for various productions used throughout dapi. The
+notation here is an EBNF grammar; here is a good explanation for what
+EBNF is:
 
+http://www.garshol.priv.no/download/text/bnf.html
 
-The range is a key start symbol in dapi. Each of the non-option
+This document is written for Emacs Outline mode, so the headings
+appear prefixed with a series of asterisks.
+
+Terminals are double quoted. All terminals are case
+insensitive. Production rule names are surrounded by angle brackets.
+
+There are many examples, which are presented in a two-column
+format. They assume that the current date is 2013-04-02. The left
+column shows you the sample input; the right column shows you the
+resulting dates (inclusive of both ends unless otherwise stated.)
+Though the current date defaults to today (whatever that is according
+to your machine's clock and its time zone as the local day, not the
+UTC day, is used) you can change the current date using the --current
+option.
+
+* range
+
+The <range> is a key start symbol in dapi. Each of the non-option
 arguments is a range.
 
-range ::= moddedUnit | monthYear | absYear | datedRange
+<range> ::= <moddedUnit> | <monthYear> | <absYear> | <datedRange>
 
-monthYear ::= monthAbbrev absYear
+* mod
 
-datedRange ::= dateSpec rangeSep dateSpec
+A <mod> modifies something that comes after it, such as a unit. For
+example, the mod "this" can be appled to "week" or "month" or to
+"january". A mod can also be a sign and a number, for example "+2", so
+that "+1 week" means next week, "+2 weeks" means 2 weeks from now,
+etc.
 
-rangeSep ::= "-"
+<mod> ::= <modText> | <modArith>
 
-For moddedUnit, no mod is the same as "this".
+<modText> ::= "this" | "next" | "last"
 
-moddedUnit ::= mod? unitOrMonth
+<modArith> ::= <sign> <digits>
 
-unitOrMonth ::= unit | monthAbbrev
+<sign> ::= "+" | "-"
 
-unit ::= "day" | "week" | "month" | "year" | "decade" | "century" |
+<digits> ::= <digit>+
+
+<digit> ::= "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
+
+* moddedUnit
+
+For <moddedUnit>, no mod is the same as "this". Can be affected by the
+--base1, --base0, --current, and --week-start options. Examples:
+
+this week                               2013-03-31 - 2013-04-06      
+next month                              2013-05-01 - 2013-05-31
++1 decade                               2020-01-01 - 2029-12-31
+last year                               2012-01-01 - 2012-12-31
+-3 jan                                  2010-01-01 - 2010-01-31
+next jul                                2014-07-01 - 2014-07-31
+aug                                     2013-08-01 - 2013-08-31
+
+<moddedUnit> ::= <mod>? <unitOrMonth>
+
+<unitOrMonth> ::= <unit> | <monthAbbrev>
+
+<unit> ::= "day" | "week" | "month" | "year" | "decade" | "century" |
 "millennium" | "quarter"
 
-mod ::= modText | modArith
+* monthYear
 
-modText ::= "this" | "next" | "last"
+Allows you to specify a month and its year. Examples:
 
-modArith ::= sign digits
+jan 2012                                2012-01-01 - 2012-01-31
+jul 1776                                1776-07-01 - 1776-07-31
 
-digits ::= digit+
+<monthYear> ::= <monthAbbrev> <absYear>
 
-digit ::= "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
+* datedRange
 
-sign ::= "+" | "-"
+Specifies a range of dates where you specify the beginning and end of
+the range with exact dates. The second date is one past the last day
+to be included in the list. These can be backward.
 
-dateSpec ::= absolute | relative
+2013-01-01 - 2013-03-01                 every day in January and February
+2013-01-01 - 2013-01-02                 January 1, 2001, only
+2013-02-01 - 2013-01-01                 2013-02-01 - 2013-01-02
 
-absolute ::= absYear sep month sep dayOrLast
+<datedRange> ::= <dateSpec> <rangeSep> <dateSpec>
 
-absYear ::= digits
+<rangeSep> ::= "-"
 
-sep ::= "/" | "-"
+<dateSpec> ::= <absolute> | <relative>
+
+<absolute> ::= <absYear> <sep> <month> <sep> <dayOrLast>
+
+<absYear> ::= <digits>
+
+<sep> ::= "/" | "-"
 
 * Months
 
-month ::= digits | monthAbbrev
+<month> ::= <digits> | <monthAbbrev>
 
-monthAbbrev ::= "jan" | "feb" | "mar" | "apr" | "may" | "jun" | "jul"
+<monthAbbrev> ::= "jan" | "feb" | "mar" | "apr" | "may" | "jun" | "jul"
 | "aug" | "sep" | "oct" | "nov" | "dec"
 
 * Day
 
 Last indicates the last day of that month.
 
-day ::= digits
+<day> ::= <digits>
 
-dayOrLast ::= digits | last
+<dayOrLast> ::= <digits> | <last>
 
-last ::= "l"
+<last> ::= "l"
+
+2013-02-l - 2013-01-l                   2013-02-28 - 2013-02-01
 
 * Relative
 
-relative ::= relDay | relDayOfWeek | relByUnit
+<relative> ::= <relDay> | <relDayOfWeek> | <relByUnit>
 
 For relDayOfWeek, no mod is the same as "this". "this" picks the day
 that is in the current week, whether in the past or future. "next"
 from next week, "last" from last week. +1 is the next occurring day,
 excluding today. -1 is the previous occurring day, excluding today.
 
-relDayOfWeek ::= mod? dayOfWeek
+If you specify a <relative> date for the first date in a <datedRange>,
+it is interpreted relative to the current day (typically today, though
+this can be affected by the --current option.) If you specify a
+<relative> date for the second day in a <datedRange>, it is
+interpreted in relation to the *first day in the range*, not to the
+current day.
 
-relDay ::= "today" | "yesterday" | "tomorrow"
+If you specify a <datedRange> and the second day is an absolute day,
+the second date is the one that is first past the end of the
+range. However, if the second day is a relative day, it includes all
+days specified by the given period.
 
-relByUnit ::= modArith unit
+yesterday - tomorrow                    2013-04-01 only
+-1 monday - tomorrow                    2013-03-25 only
+2013-01-01 - +2 week                    2013-01-01 - 2013-01-14
+2013-01-01 - +1 day                     2013-01-01 only
+
+<relDayOfWeek> ::= <mod>? <dowName>
+
+<relDay> ::= "today" | "yesterday" | "tomorrow"
+
+<relByUnit> ::= <modArith> <unit>
 
 * Day of week
 
-dayOfWeek ::= dowName
-
-dowName ::= "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat"
+<dowName> ::= "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat"

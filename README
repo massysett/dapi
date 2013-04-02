@@ -1,0 +1,18 @@
+dapi - prints a series of dates to standard output.
+
+The name is short for "date picker".
+
+dapi's web pages:
+
+http://github.com/massysett/dapi - has a little more information, and
+a link to the manual page.
+
+http://hackage.haskell.org/package/dapi
+http://github.com/massysett/dapi
+
+To install dapi, just run "cabal install dapi". This will not install
+the manual page, so copy it yourself to a good location (maybe "sudo
+cp dapi.1 /usr/share/man/man1" or "sudo install -Dm644 dapi.1
+/usr/local/share/man/man1". If you do not want to install the man
+page, you can read it where it is by including a slash when you invoke
+man (for instance, "man ./dapi.1".
