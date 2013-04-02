@@ -2,7 +2,7 @@
 -- see http://haskell.org/cabal/users-guide/
 
 name:                dapi
-version:             0.1.0.0
+version:             0.2.0.0
 synopsis:            Prints a series of dates
 description:
   dapi prints a series of dates to the console. You can filter
@@ -30,7 +30,7 @@ executable dapi
     , transformers ==0.3.*
     , time ==1.4.*
     , explicit-exception ==0.1.*
-    , prednote ==0.5.*
+    , prednote ==0.6.*
     , multiarg ==0.12.*
     , old-locale ==1.0.*
     , rainbow ==0.2.*
