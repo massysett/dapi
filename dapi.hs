@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleInstances, MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
-module Main where
+module Main (main) where
 
 import Control.Applicative
   ( many, (<$), (<|>), some, (<$>),
@@ -13,7 +13,7 @@ import Data.Time.Calendar.WeekDate (toWeekDate)
 import Data.Functor.Identity (Identity)
 import Data.Char (toLower)
 import Data.Either (partitionEithers)
-import Data.List (isPrefixOf, foldl', unfoldr)
+import Data.List (foldl', unfoldr)
 import Data.Maybe (fromMaybe, catMaybes)
 import Data.Monoid ((<>))
 import qualified Data.Text as X
@@ -55,57 +55,57 @@ help pn = unlines
   , ""
   , "Options:"
   , ""
-  , "--current, -c DATE_SPEC"
+  , "--current, -C DATE_SPEC"
   , "  Set current date, used for relative dates"
-  , "--week-start digit"
+  , "--week-start, -W DAY_OF_WEEK"
   , "  The first day of the week is the specified day"
-  , "--format, -f FORMAT_SRING"
+  , "--format, -F FORMAT_SRING"
   , "  Formats dates, see strftime(3)"
-  , "--base0"
+  , "--base0, -0"
   , "  Centuries, decades, and millennia begin with years that end in 0"
-  , "--base1"
+  , "--base1, -1"
   , "  Centuries, decades, and millennia begin with years that end in 1"
   , "  A decade begins with a year ending in this digit"
   , ""
-  , "--infix - use infix operators"
-  , "--rpn - use RPN operators"
+  , "--infix, -I - use infix operators"
+  , "--rpn, -R - use RPN operators"
   , ""
-  , "--show-expression - show filtering expression (toggle)"
-  , "--verbose-filter - filter days verbosely (toggle)"
-  , "--color-to-file - use colors when stdout is not a terminal"
+  , "--show-expression, -S - show filtering expression (toggle)"
+  , "--verbose-filter, -V - filter days verbosely (toggle)"
+  , "--color-to-file, -T - use colors when stdout is not a terminal"
   , "                  (toggle)"
   , ""
   , "Predicates:"
   , "  relative dates are interpreted relative to the current date"
   , ""
-  , "--date, -d COMPARER DATE_SPEC"
+  , "--date, -t COMPARER DATE_SPEC"
   , "  date falls in this range"
   , "--weekday, -w COMPARER DAY_OF_WEEK"
   , "  day of week falls in this range"
-  , "--day COMPARER DAY_OR_LAST"
+  , "--day, -d COMPARER DAY_OR_LAST"
   , "  day falls in given range"
   , "--year, y COMPARER YEAR"
   , "  year falls in given range"
   , "--month, m COMPARER MONTH"
   , "  month falls in given range"
-  , "--ends"
+  , "--ends, -e"
   , "  first or last day"
-  , "--first"
+  , "--first, -f"
   , "  First day"
-  , "--last"
+  , "--last, -l"
   , "  Last day (may predate first day)"
-  , "--nth DIGITS"
+  , "--count, -c DIGITS"
   , "  every nth day (index of day modulus the given number"
   , "  equals zero)"
   , ""
   , "Operators"
-  , "--and, --or, --not"
-  , "--open, --close - open or close parenthesis"
+  , "--and, -a, --or, -o, --not, -n"
+  , "--open, -(, --close, -) - open or close parenthesis"
   , "  (error with RPN)"
   ]
 
 
-newtype Lower = Lower { unLower :: String }
+newtype Lower = Lower String
   deriving (Show, Eq)
 
 instance Monad m => P.Stream Lower m Char where
@@ -115,18 +115,11 @@ instance Monad m => P.Stream Lower m Char where
 
 type Parser = P.ParsecT Lower () Identity
 
-matchAbbrev :: [(String, a)] -> String -> Maybe a
-matchAbbrev ls s = case lookup s ls of
-  Just k -> Just k
-  Nothing -> case filter ((s `isPrefixOf`) . fst) ls of
-    (_, v):[] -> Just v
-    _ -> Nothing
-
 matchDayOfWeek :: String -> Maybe DayOfWeek
-matchDayOfWeek = matchAbbrev
-  [ ("sunday", Sun), ("monday", Mon), ("tuesday", Tue)
-  , ("wednesday", Wed), ("thursday", Thu)
-  , ("friday", Fri), ("saturday", Sat) ]
+matchDayOfWeek s = lookup s
+  [ ("sun", Sun), ("mon", Mon), ("tue", Tue)
+  , ("wed", Wed), ("thu", Thu)
+  , ("fri", Fri), ("sat", Sat) ]
 
 --
 -- Date types - beginning with most primitive
@@ -534,14 +527,14 @@ yearToList (AbsYear ds) =
 --
 
 pUnit :: Parser Unit
-pUnit = parseList "range specification"
-  [ ("days", UDay), ("weeks", Week), ("months", Month)
-  , ("years", Year)
-  , ("decades", Decade), ("century", Century)
-  , ("millennium", Millennium), ("quarters", Quarter) ]
+pUnit = parseList
+  [ ("day", UDay), ("week", Week), ("month", Month)
+  , ("year", Year)
+  , ("decade", Decade), ("century", Century)
+  , ("millennium", Millennium), ("quarter", Quarter) ]
 
 pModText :: Parser ModText
-pModText = parseList "modifier"
+pModText = parseList
   [ ("this", This), ("next", Next), ("last", Last) ]
 
 pSign :: Parser Sign
@@ -592,7 +585,7 @@ pRelDayOfWeek
   = RelDayOfWeek <$> pOptionalMod <* spaces <*> pDayOfWeek
 
 pRelDay :: Parser RelDay
-pRelDay = parseList "relative day"
+pRelDay = parseList
   [ ("today", Today), ("yesterday", Yesterday)
   , ("tomorrow", Tomorrow) ]
 
@@ -604,29 +597,23 @@ separator :: Parser ()
 separator = () <$ (char '-' <|> char '/')
 
 parseList
-  :: String
-  -- ^ Description of what we are parsing, for error message
-  -> [(String, a)]
+  :: [(String, a)]
   -> Parser a
 
-parseList s ls = P.try $ do
-  str <- some P.letter
-  maybe (fail $ "could not parse " ++ s ++ ": " ++ str)
-    return $ matchAbbrev ls str
-
+parseList = P.choice . map (\(s, x) -> x <$ P.try (P.string s))
 
 pMonthAbbrev :: Parser Month
-pMonthAbbrev = parseList "month abbreviation"
-  [ ("january", Jan), ("february", Feb), ("march", Mar),
-    ("april", Apr) , ("may", May), ("june", Jun), ("july", Jul),
-    ("august", Aug) , ("september", Sep), ("october", Oct),
-    ("november", Nov), ("december", Dec) ]
+pMonthAbbrev = parseList
+  [ ("jan", Jan), ("feb", Feb), ("mar", Mar),
+    ("apr", Apr) , ("may", May), ("jun", Jun), ("jul", Jul),
+    ("aug", Aug) , ("sep", Sep), ("oct", Oct),
+    ("nov", Nov), ("dec", Dec) ]
 
 pDayOfWeek :: Parser DayOfWeek
-pDayOfWeek = parseList "day of week"
-  [ ("sunday", Sun), ("monday", Mon), ("tuesday", Tue)
-  , ("wednesday", Wed), ("thursday", Thu)
-  , ("friday", Fri), ("saturday", Sat) ]
+pDayOfWeek = parseList
+  [ ("sun", Sun), ("mon", Mon), ("tue", Tue)
+  , ("wed", Wed), ("thu", Thu)
+  , ("fri", Fri), ("sat", Sat) ]
 
 
 
@@ -869,7 +856,7 @@ parsecMultiarg p s = case P.parse (p <* P.eof) "" (Lower s) of
 allOpts :: [MA.OptSpec (ParseOpts -> Ex.Exceptional String ParseOpts)]
 allOpts =
 
-  [ MA.OptSpec ["current"] "c" . MA.OneArgE $ \s -> do
+  [ MA.OptSpec ["current"] "C" . MA.OneArgE $ \s -> do
     ds <- parsecMultiarg pDateSpec s
     return $ \o -> do
       let baseDay = pCurrent o
@@ -877,32 +864,32 @@ allOpts =
       d <- Ex.fromMaybe ("invalid date: " ++ s) $ dayDateSpec dow baseDay ds
       return o { pCurrent = d }
 
-  , MA.OptSpec ["week-start"] "" . MA.OneArgE $ \s ->
+  , MA.OptSpec ["week-start"] "W" . MA.OneArgE $ \s ->
     case matchDayOfWeek (map toLower s) of
       Nothing -> Ex.throw . MA.ErrorMsg $ "invalid day of week"
       Just dow -> return $ \o -> return $ o { pWeekStart = dow }
 
-  , MA.OptSpec ["format"] "f" . MA.OneArg $ \s o ->
+  , MA.OptSpec ["format"] "F" . MA.OneArg $ \s o ->
     return o { pFormat = s }
 
-  , MA.OptSpec ["base0"] "" (MA.NoArg (\o -> return o { pBase = False }))
-  , MA.OptSpec ["base1"] "" (MA.NoArg (\o -> return o { pBase = True }))
+  , MA.OptSpec ["base0"] "0" (MA.NoArg (\o -> return o { pBase = False }))
+  , MA.OptSpec ["base1"] "1" (MA.NoArg (\o -> return o { pBase = True }))
 
-  , MA.OptSpec ["infix"] ""
+  , MA.OptSpec ["infix"] "I"
     (MA.NoArg (\o -> return o { pExprDesc = Exp.Infix }))
 
-  , MA.OptSpec ["rpn"] ""
+  , MA.OptSpec ["rpn"] "R"
     (MA.NoArg (\o -> return o { pExprDesc = Exp.RPN }))
 
-  , MA.OptSpec ["show-expression"] ""
+  , MA.OptSpec ["show-expression"] "S"
     (MA.NoArg (\o -> return o { pShowExpression =
                                 not (pShowExpression o) }))
 
-  , MA.OptSpec ["verbose-filter"] ""
+  , MA.OptSpec ["verbose-filter"] "V"
     (MA.NoArg (\o -> return o { pVerboseFilter =
                                 not (pVerboseFilter o) }))
 
-  , MA.OptSpec ["color-to-file"] ""
+  , MA.OptSpec ["color-to-file"] "T"
     (MA.NoArg (\o -> return o { pColorToFile =
                                 not (pColorToFile o) }))
 
@@ -916,43 +903,25 @@ allOpts =
   , pdctLast
   , pdctNth
 
-  , MA.OptSpec ["and"] "" . MA.NoArg . fmap return
+  , MA.OptSpec ["and"] "a" . MA.NoArg . fmap return
     $ addOperand Exp.opAnd
 
-  , MA.OptSpec ["or"] "" . MA.NoArg . fmap return
+  , MA.OptSpec ["or"] "o" . MA.NoArg . fmap return
     $ addOperand Exp.opOr
 
-  , MA.OptSpec ["not"] "" . MA.NoArg . fmap return
+  , MA.OptSpec ["not"] "n" . MA.NoArg . fmap return
     $ addOperand Exp.opNot
 
-  , MA.OptSpec ["open"] "" . MA.NoArg . fmap return
+  , MA.OptSpec ["open"] "(" . MA.NoArg . fmap return
     $ addOperand Exp.openParen
 
-  , MA.OptSpec ["close"] "" . MA.NoArg . fmap return
+  , MA.OptSpec ["close"] ")" . MA.NoArg . fmap return
     $ addOperand Exp.closeParen
 
   ]
 
--- | Given a series of numbers, and a designated number that is the
--- beginning of the series, compares two numbers.
-compareSeries
-  :: Ord a
-  => a
-  -- ^ The designated beginning of the series
-  -> a
-  -> a
-  -> Ordering
-compareSeries b x y = case (compare x b, compare y b) of
-  (EQ, LT) -> LT
-  (EQ, GT) -> LT
-  (LT, EQ) -> LT
-  (LT, GT) -> GT
-  (GT, EQ) -> GT
-  (GT, LT) -> GT
-  _ -> compare x y
-
 pdctDate :: MA.OptSpec (ParseOpts -> Ex.Exceptional String ParseOpts)
-pdctDate = MA.OptSpec ["date"] "d" (MA.TwoArgE f)
+pdctDate = MA.OptSpec ["date"] "t" (MA.TwoArgE f)
   where
     f a1 a2 = do
       cmpFn <- getComparer a1
@@ -984,8 +953,13 @@ pdctWeekday = MA.OptSpec ["weekday"] "w" (MA.TwoArgE f)
       dow <- Ex.fromMaybe (MA.ErrorMsg "bad day of week")
              $ matchDayOfWeek a2
       let g o =
-            let cmp a = compareSeries (pWeekStart o)
-                        (dayToDayOfWeek . iDay $ a) dow
+            let lkup = fromMaybe (error "pdctWeekday: lookup failed")
+                       . flip lookup alist
+                dayList = listStartingWith (Proxy :: Proxy DayOfWeek)
+                          (pWeekStart o)
+                alist = zip dayList [(0 :: Int) ..]
+                cmp a = compare (lkup (dayToDayOfWeek . iDay $ a))
+                                (lkup dow)
                 pdct = cmpFn (X.pack . show $ dow) "day of week"
                        cmp
             in return $ addOperand (Exp.operand pdct) o
@@ -1005,7 +979,7 @@ dayToDayOfWeek d
     (_, _, w) = toWeekDate d
 
 pdctDay :: MA.OptSpec (ParseOpts -> Ex.Exceptional String ParseOpts)
-pdctDay = MA.OptSpec ["day"] "" (MA.TwoArgE f)
+pdctDay = MA.OptSpec ["day"] "d" (MA.TwoArgE f)
   where
     f a1 a2 = do
       cmpFn <- getComparer a1
@@ -1058,7 +1032,7 @@ pdctMonth = MA.OptSpec ["month"] "m" (MA.TwoArgE f)
       return $ fmap return (addOperand tok)
 
 pdctEnds :: MA.OptSpec (ParseOpts -> Ex.Exceptional String ParseOpts)
-pdctEnds = MA.OptSpec ["ends"] "" (MA.NoArg (fmap return f))
+pdctEnds = MA.OptSpec ["ends"] "e" (MA.NoArg (fmap return f))
   where
     f = addOperand tok
     tok = Exp.operand pdct
@@ -1067,7 +1041,7 @@ pdctEnds = MA.OptSpec ["ends"] "" (MA.NoArg (fmap return f))
     end = Pd.operand "last date in the list" ((== 0) . iBack)
 
 pdctFirst :: MA.OptSpec (ParseOpts -> Ex.Exceptional String ParseOpts)
-pdctFirst = MA.OptSpec ["first"] "" (MA.NoArg (fmap return f))
+pdctFirst = MA.OptSpec ["first"] "f" (MA.NoArg (fmap return f))
   where
     f = addOperand
         . Exp.operand
@@ -1075,7 +1049,7 @@ pdctFirst = MA.OptSpec ["first"] "" (MA.NoArg (fmap return f))
         $ ((== 0) . iFwd)
 
 pdctLast :: MA.OptSpec (ParseOpts -> Ex.Exceptional String ParseOpts)
-pdctLast = MA.OptSpec ["last"] "" (MA.NoArg (fmap return f))
+pdctLast = MA.OptSpec ["last"] "l" (MA.NoArg (fmap return f))
   where
     f = addOperand
         . Exp.operand
@@ -1083,7 +1057,7 @@ pdctLast = MA.OptSpec ["last"] "" (MA.NoArg (fmap return f))
         $ ((== 0) . iBack)
 
 pdctNth :: MA.OptSpec (ParseOpts -> Ex.Exceptional String ParseOpts)
-pdctNth = MA.OptSpec ["nth"] "" (MA.OneArgE f)
+pdctNth = MA.OptSpec ["count"] "c" (MA.OneArgE f)
   where
     f a1 = do
       count <- MA.reader a1
