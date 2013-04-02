@@ -1,0 +1,166 @@
+.TH dapi 1
+.
+.SH NAME
+dapi \- print a series of dates
+.
+.SH SYNOPSIS
+.B dapi
+[options] DATE_RANGE...
+.
+.SH DESCRIPTION
+.SS Ranges
+.P
+.B dapi
+prints a series of dates on standard output. You specify one or more
+ranges of dates. Examples:
+.
+.P
+.EX
+dapi 'this month'
+.EE
+.
+.EX
+dapi 'next month'
+.EE
+.
+.EX
+dapi 'jan'
+.EE
+.
+.EX
+dapi 'this week'
+.EE
+.
+.EX
+dapi '+1 week'
+.EE
+.
+.P
+Often ranges include multiple words, so you have to quote them so that
+your shell presents them to dapi as a single command line argument.
+.
+.P
+You can specify exact dates for your range:
+.P
+.EX
+dapi '2013-03-01 - 2013-04-01'
+.EE
+.P
+This is a single range, so you must quote it as it is a single
+command-line argument. The second date in the range is the date that
+is
+.I one day past
+the last day you want included in the range. Therefore, the above
+example prints every day in March 2013; it does
+.I not
+include April 1.
+.
+.P
+Ranges can also be backward:
+.P
+.EX
+dapi '2013-03-31 - 2013-02-28'
+.EE
+.P
+prints every day in March 2013, but in reverse order. In situations
+like that it can be handy to specify that you want to use the last day
+of the month. Use the letter "l" for this. The next example prints the
+same dates as the one above:
+.
+.P
+.EX
+dapi '2013-03-l - 2013-02-l'
+.EE
+.
+.P
+You can specify more than one range and all the dates will be
+printed. This prints every day in 2013 and 2014:
+.P
+.EX
+dapi 2013 2014
+.EE
+.
+.SS Filters
+.
+.P
+If you don't want to see all the dates in the ranges that you
+specified, you can filter the days. You specify a predicate--that is,
+a function that will be applied to each date in the ranges. The date
+is included in the result only if the predicate returns True. For
+instance, the
+.B \-\-day
+option specifies a predicate which examines the day of the month. This
+prints the first day of each month in 2013:
+.P
+.EX
+dapi --day '==' 1 2013
+.EE
+.P
+Prints the first and second day of each month in 2013:
+.P
+.EX
+dapi --day '<=' 2 2013
+.EE
+.P
+As with range specifiers, you can use the letter "l" with the
+.B \-\-day
+option to specify the last day of the month. Prints the last day of
+each month in 2013:
+.P
+.EX
+dapi --day '==' l 2013
+.EE
+.P
+Another predicate option is
+.BR \-\-weekday ,
+which specifies a day of the week. Prints every Thursday in this month:
+.P
+.EX
+dapi --weekday '==' thu 'this month'
+.EE
+.P
+If you have more than one predicate option, you must join them together using operators. The operator options are
+.BR \-\-and ,
+.BR \-\-or ,
+and
+.BR \-\-not .
+By default,
+.B dapi
+uses reverse polish notation, which (imprecisely) means that operators
+are specified after the predicates they affect. For example, this
+prints every date in 2013 that is both a Sunday and is in the first 15
+days of the month:
+.P
+.EX
+dapi \-\-weekday '==' sun \-\-day '<=' 15 \-\-and 2013
+.EE
+.
+.SH OPTIONS
+.P
+The order of the
+.B dapi
+command line is significant. Most options only affect other options
+that are later on the command line. This is similar, for better or for
+worse, to
+.BR find (1).
+.
+.SS Options affecting dates
+.TP
+.BI \-\-current " DATE_SPEC"
+.TQ
+.BI \-C " DATE_SPEC"
+Sets the current date. When you specify a date or a range that is
+relative to a day, such as in the command
+.BR "dapi 'this month'" ,
+.B dapi
+needs to start with a date to figure out when "this month" is. By default,
+.B dapi
+uses today. To specify a different date, use this option.
+.
+.TP
+.BI \-\-format " FORMAT_STRING"
+.TQ
+.BI \-f " FORMAT_STRING"
+Formats dates. This uses the same formatting strings that
+.BR strftime (3)
+uses, so look at that man page for your choices here.
